@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app.dart';
@@ -48,42 +50,94 @@ class HomeScreen extends StatelessWidget {
           return ListView(
             padding: EdgeInsets.fromLTRB(side.left, 4, side.right, 24 + MediaQuery.paddingOf(context).bottom + 70),
             children: [
-              const _HeroCard(),
+              const _Enter(index: 0, child: _HeroCard()),
               const SizedBox(height: 28),
-              _SectionHeader(title: 'Recent', onSeeAll: () => onNavigate(1)),
+              _Enter(index: 1, child: _SectionHeader(title: 'Recent', onSeeAll: () => onNavigate(1))),
               const SizedBox(height: 12),
               if (recent.isEmpty)
                 const _EmptyRecent()
               else
-                SizedBox(
-                  height: cardSize + 48,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    clipBehavior: Clip.none,
-                    itemCount: recent.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 14),
-                    itemBuilder: (context, i) => _RecentCard(meta: recent[i], size: cardSize),
+                _Enter(
+                  index: 2,
+                  child: SizedBox(
+                    height: cardSize + 48,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      clipBehavior: Clip.none,
+                      itemCount: recent.length,
+                      separatorBuilder: (_, _) => const SizedBox(width: 14),
+                      itemBuilder: (context, i) => _RecentCard(meta: recent[i], size: cardSize),
+                    ),
                   ),
                 ),
               const SizedBox(height: 28),
-              _SectionHeader(title: 'Templates', onSeeAll: () => onNavigate(2)),
+              _Enter(index: 3, child: _SectionHeader(title: 'Templates', onSeeAll: () => onNavigate(2))),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  for (final template in CanvasTemplate.values) ...[
-                    Expanded(child: _TemplateCard(template: template)),
-                    if (template != CanvasTemplate.values.last) const SizedBox(width: 10),
+              _Enter(
+                index: 4,
+                child: Row(
+                  children: [
+                    for (final template in CanvasTemplate.values) ...[
+                      Expanded(child: _TemplateCard(template: template)),
+                      if (template != CanvasTemplate.values.last) const SizedBox(width: 10),
+                    ],
                   ],
-                ],
+                ),
               ),
               if (scope.settings.showTips) ...[
                 const SizedBox(height: 22),
-                _TipBanner(onDismiss: () => scope.settings.setShowTips(false)),
+                _Enter(index: 5, child: _TipBanner(onDismiss: () => scope.settings.setShowTips(false))),
               ],
             ],
           );
         },
       ),
+    );
+  }
+}
+
+/// Fades and slides a section in on first build, staggered by [index].
+class _Enter extends StatefulWidget {
+  const _Enter({required this.index, required this.child});
+
+  final int index;
+  final Widget child;
+
+  @override
+  State<_Enter> createState() => _EnterState();
+}
+
+class _EnterState extends State<_Enter> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 420),
+  );
+  late final Animation<double> _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+  late final Animation<Offset> _slide =
+      Tween(begin: const Offset(0, 0.06), end: Offset.zero).animate(_fade);
+
+  Timer? _delay;
+
+  @override
+  void initState() {
+    super.initState();
+    _delay = Timer(Duration(milliseconds: 60 * widget.index), () {
+      if (mounted) _controller.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _delay?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(position: _slide, child: widget.child),
     );
   }
 }

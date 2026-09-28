@@ -10,6 +10,10 @@ class AppSettings extends ChangeNotifier {
   /// Number of drawings a free account can keep.
   static const int freeDrawingLimit = 10;
 
+  /// Layers per drawing for free and Pro accounts.
+  static const int freeLayerLimit = 2;
+  static const int proLayerLimit = 10;
+
   ThemeMode _themeMode = ThemeMode.system;
   double _defaultStrokeWidth = 12;
   bool _showTips = true;

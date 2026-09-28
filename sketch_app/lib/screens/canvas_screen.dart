@@ -8,14 +8,18 @@ import 'package:share_plus/share_plus.dart';
 
 import '../app.dart';
 import '../canvas/canvas_controller.dart';
+import '../canvas/timelapse.dart';
 import '../models/drawing.dart';
+import '../models/layer.dart';
 import '../models/stroke.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_theme.dart';
 import '../theme/layout.dart';
 import '../widgets/color_picker_dialog.dart';
 import '../widgets/dialogs.dart';
+import '../widgets/layers_sheet.dart';
 import '../widgets/pro_sheet.dart';
+import '../widgets/replay_dialog.dart';
 import '../widgets/sketch_canvas.dart';
 
 /// The drawing editor. Opens either an existing drawing ([existing]) or a
@@ -44,10 +48,12 @@ class CanvasScreen extends StatefulWidget {
 
 class _CanvasScreenState extends State<CanvasScreen> {
   CanvasController? _controller;
+  final CanvasViewport _viewport = CanvasViewport();
   String? _id;
   String? _name;
   String? _loadError;
   bool _busy = false;
+  double? _progress;
 
   @override
   void initState() {
@@ -60,6 +66,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
   Future<void> _load() async {
     final scope = AppScope.of(context);
     final existing = widget.existing;
+    final maxLayers = scope.settings.isPro ? AppSettings.proLayerLimit : AppSettings.freeLayerLimit;
     try {
       CanvasController controller;
       if (existing == null) {
@@ -67,14 +74,18 @@ class _CanvasScreenState extends State<CanvasScreen> {
           template: widget.template,
           color: AppColors.palette.first,
           strokeWidth: scope.settings.defaultStrokeWidth,
+          maxLayers: maxLayers,
         );
       } else {
         final doc = await scope.repository.open(existing.id);
         controller = CanvasController(
           template: doc.meta.template,
-          initial: CanvasSnapshot(background: doc.background, strokes: doc.strokes),
+          initial: CanvasSnapshot(layers: doc.layers),
           color: AppColors.palette.first,
           strokeWidth: scope.settings.defaultStrokeWidth,
+          paperColor: doc.meta.paperColor == null ? CanvasController.defaultPaperColor : Color(doc.meta.paperColor!),
+          // Never lock someone out of layers they already made.
+          maxLayers: maxLayers < doc.layers.length ? doc.layers.length : maxLayers,
         );
       }
       if (!mounted) {
@@ -90,6 +101,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
   @override
   void dispose() {
     _controller?.dispose();
+    _viewport.dispose();
     super.dispose();
   }
 
@@ -108,8 +120,19 @@ class _CanvasScreenState extends State<CanvasScreen> {
       if (mounted) _toast('Something went wrong: $e');
       return null;
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _progress = null;
+        });
+      }
     }
+  }
+
+  Future<File> _tempFile(String extension) async {
+    final dir = await getTemporaryDirectory();
+    final safeName = (_name ?? 'sketch').replaceAll(RegExp(r'[^\w\- ]'), '').trim();
+    return File('${dir.path}/${safeName.isEmpty ? 'sketch' : safeName}.$extension');
   }
 
   // ---------------------------------------------------------------------------
@@ -143,8 +166,8 @@ class _CanvasScreenState extends State<CanvasScreen> {
         id: _id,
         name: name!,
         template: controller.template,
-        strokes: controller.strokes,
-        background: controller.background,
+        layers: controller.layers,
+        paperColor: controller.paperColor == CanvasController.defaultPaperColor ? null : controller.paperColor.toARGB32(),
         thumbnailPng: thumb,
       );
     });
@@ -172,13 +195,38 @@ class _CanvasScreenState extends State<CanvasScreen> {
     final isPro = AppScope.of(context).settings.isPro;
     await _guard(() async {
       final bytes = await controller.exportPng(CanvasController.referenceSize, pixelRatio: isPro ? 4 : 2);
-      final dir = await getTemporaryDirectory();
-      final safeName = (_name ?? 'sketch').replaceAll(RegExp(r'[^\w\- ]'), '').trim();
-      final file = File('${dir.path}/${safeName.isEmpty ? 'sketch' : safeName}.png');
+      final file = await _tempFile('png');
       await file.writeAsBytes(bytes);
       await SharePlus.instance.share(ShareParams(
         files: [XFile(file.path, mimeType: 'image/png')],
         text: 'Made with Sketch',
+      ));
+    });
+  }
+
+  Future<void> _shareTimelapse() async {
+    final controller = _controller;
+    if (controller == null) return;
+    if (controller.isEmpty) {
+      _toast('Draw something first.');
+      return;
+    }
+    if (!AppScope.of(context).settings.isPro) {
+      await showProSheet(context, reason: 'Time-lapse export is a Pro feature.');
+      return;
+    }
+    await _guard(() async {
+      final bytes = await Timelapse.encodeGif(
+        controller,
+        onProgress: (p) {
+          if (mounted) setState(() => _progress = p);
+        },
+      );
+      final file = await _tempFile('gif');
+      await file.writeAsBytes(bytes);
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(file.path, mimeType: 'image/gif')],
+        text: 'Drawn with Sketch',
       ));
     });
   }
@@ -197,11 +245,11 @@ class _CanvasScreenState extends State<CanvasScreen> {
 
   Future<void> _clear() async {
     final controller = _controller;
-    if (controller == null || controller.isEmpty) return;
+    if (controller == null || controller.activeLayer.isEmpty) return;
     final ok = await showConfirmDialog(
       context,
-      title: 'Clear canvas?',
-      message: 'Everything on the canvas will be removed. You can undo this.',
+      title: 'Clear layer?',
+      message: 'Everything on "${controller.activeLayer.name}" will be removed. You can undo this.',
       confirmLabel: 'Clear',
     );
     if (ok) controller.clear();
@@ -231,6 +279,72 @@ class _CanvasScreenState extends State<CanvasScreen> {
     if (chosen != null) controller.setTemplate(chosen);
   }
 
+  Future<void> _pickPaper() async {
+    final controller = _controller;
+    if (controller == null) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Paper color', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              ListenableBuilder(
+                listenable: controller,
+                builder: (context, _) => Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final color in CanvasController.paperColors)
+                      _PaperSwatch(
+                        color: color,
+                        selected: controller.paperColor == color,
+                        onTap: () => controller.setPaperColor(color),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickSymmetry() async {
+    final controller = _controller;
+    if (controller == null) return;
+    final chosen = await showModalBottomSheet<SymmetryMode>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final mode in SymmetryMode.values)
+              ListTile(
+                leading: Icon(switch (mode) {
+                  SymmetryMode.none => Icons.block,
+                  SymmetryMode.vertical => Icons.flip,
+                  SymmetryMode.horizontal => Icons.flip_camera_android,
+                  SymmetryMode.quad => Icons.grid_view_rounded,
+                }),
+                title: Text(mode.label),
+                trailing: mode == controller.symmetry ? const Icon(Icons.check) : null,
+                onTap: () => Navigator.pop(context, mode),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (chosen != null) controller.setSymmetry(chosen);
+  }
+
   Future<void> _pickCustomColor() async {
     final controller = _controller;
     if (controller == null) return;
@@ -240,6 +354,18 @@ class _CanvasScreenState extends State<CanvasScreen> {
     }
     final color = await showColorPickerDialog(context, initial: controller.color);
     if (color != null) controller.setColor(color);
+  }
+
+  Future<void> _openLayers() async {
+    final controller = _controller;
+    if (controller == null) return;
+    final settings = AppScope.of(context).settings;
+    await showLayersSheet(
+      context,
+      controller,
+      isPro: settings.isPro,
+      onUpgrade: () => showProSheet(context, reason: 'Free accounts get ${AppSettings.freeLayerLimit} layers.'),
+    );
   }
 
   Future<void> _handlePop() async {
@@ -288,6 +414,10 @@ class _CanvasScreenState extends State<CanvasScreen> {
         const SingleActivator(LogicalKeyboardKey.keyB): () => c.setTool(ToolType.brush),
         const SingleActivator(LogicalKeyboardKey.keyE): () => c.setTool(ToolType.eraser),
         const SingleActivator(LogicalKeyboardKey.keyF): () => c.setTool(ToolType.fill),
+        const SingleActivator(LogicalKeyboardKey.keyL): _openLayers,
+        const SingleActivator(LogicalKeyboardKey.keyM): _pickSymmetry,
+        const SingleActivator(LogicalKeyboardKey.digit0, control: true): _viewport.reset,
+        const SingleActivator(LogicalKeyboardKey.digit0, meta: true): _viewport.reset,
         const SingleActivator(LogicalKeyboardKey.bracketLeft): () => c.setStrokeWidth((c.strokeWidth - 2).clamp(1, 40)),
         const SingleActivator(LogicalKeyboardKey.bracketRight): () => c.setStrokeWidth((c.strokeWidth + 2).clamp(1, 40)),
       };
@@ -295,19 +425,43 @@ class _CanvasScreenState extends State<CanvasScreen> {
   Widget _body(CanvasController controller) {
     final settings = AppScope.of(context).settings;
     final canvas = Center(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: softShadow(context, blur: 20, y: 8, alpha: 0.08),
-        ),
-        child: ListenableBuilder(
-          listenable: settings,
-          builder: (context, _) => SketchCanvas(
-            controller: controller,
-            stylusOnly: settings.stylusOnly,
-            pressureSensitivity: settings.pressureSensitivity,
+      child: Stack(
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: softShadow(context, blur: 20, y: 8, alpha: 0.08),
+            ),
+            child: ListenableBuilder(
+              listenable: settings,
+              builder: (context, _) => SketchCanvas(
+                controller: controller,
+                viewport: _viewport,
+                stylusOnly: settings.stylusOnly,
+                pressureSensitivity: settings.pressureSensitivity,
+              ),
+            ),
           ),
-        ),
+          Positioned(
+            right: 10,
+            top: 10,
+            child: ListenableBuilder(
+              listenable: _viewport,
+              builder: (context, _) => AnimatedOpacity(
+                opacity: _viewport.isIdentity ? 0 : 1,
+                duration: const Duration(milliseconds: 150),
+                child: IgnorePointer(
+                  ignoring: _viewport.isIdentity,
+                  child: _RoundIconButton(
+                    icon: Icons.fit_screen_outlined,
+                    onPressed: _viewport.reset,
+                    label: '${(_viewport.scale * 100).round()}%',
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
     final toolbar = _Toolbar(
@@ -317,6 +471,10 @@ class _CanvasScreenState extends State<CanvasScreen> {
       onImport: _importImage,
       onClear: _clear,
       onShare: _share,
+      onLayers: _openLayers,
+      onSymmetry: _pickSymmetry,
+      onPaper: _pickPaper,
+      onReplay: () => showReplayDialog(context, controller),
     );
 
     return CallbackShortcuts(
@@ -425,26 +583,59 @@ class _CanvasScreenState extends State<CanvasScreen> {
                           _rename();
                         case 'template':
                           _pickTemplate();
+                        case 'paper':
+                          _pickPaper();
                         case 'share':
                           _share();
+                        case 'timelapse':
+                          _shareTimelapse();
                       }
                     },
                     itemBuilder: (context) => const [
                       PopupMenuItem(value: 'save', child: ListTile(leading: Icon(Icons.save_outlined), title: Text('Save'))),
                       PopupMenuItem(value: 'saveAs', child: ListTile(leading: Icon(Icons.drive_file_rename_outline), title: Text('Save with name'))),
                       PopupMenuItem(value: 'rename', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Rename'))),
+                      PopupMenuDivider(),
                       PopupMenuItem(value: 'template', child: ListTile(leading: Icon(Icons.grid_on_outlined), title: Text('Change template'))),
+                      PopupMenuItem(value: 'paper', child: ListTile(leading: Icon(Icons.palette_outlined), title: Text('Paper color'))),
+                      PopupMenuDivider(),
                       PopupMenuItem(value: 'share', child: ListTile(leading: Icon(Icons.ios_share), title: Text('Export PNG'))),
+                      PopupMenuItem(value: 'timelapse', child: ListTile(leading: Icon(Icons.movie_creation_outlined), title: Text('Export time-lapse GIF'))),
                     ],
                   ),
                   const SizedBox(width: 8),
                 ],
         ),
-        body: _loadError != null
-            ? Center(child: Text(_loadError!))
-            : controller == null
-                ? const Center(child: CircularProgressIndicator())
-                : _body(controller),
+        body: Stack(
+          children: [
+            _loadError != null
+                ? Center(child: Text(_loadError!))
+                : controller == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : _body(controller),
+            if (_progress != null)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  child: Center(
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('Rendering time-lapse…', style: TextStyle(fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 16),
+                            SizedBox(width: 200, child: LinearProgressIndicator(value: _progress)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -458,6 +649,10 @@ class _Toolbar extends StatelessWidget {
     required this.onImport,
     required this.onClear,
     required this.onShare,
+    required this.onLayers,
+    required this.onSymmetry,
+    required this.onPaper,
+    required this.onReplay,
   });
 
   final CanvasController controller;
@@ -466,6 +661,10 @@ class _Toolbar extends StatelessWidget {
   final VoidCallback onImport;
   final VoidCallback onClear;
   final VoidCallback onShare;
+  final VoidCallback onLayers;
+  final VoidCallback onSymmetry;
+  final VoidCallback onPaper;
+  final VoidCallback onReplay;
 
   @override
   Widget build(BuildContext context) {
@@ -480,6 +679,37 @@ class _Toolbar extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Secondary actions
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 420;
+                  return Row(
+                    children: [
+                      _ChipButton(
+                        icon: Icons.layers_outlined,
+                        label: compact ? '${controller.layers.length}' : 'Layers · ${controller.layers.length}',
+                        onPressed: onLayers,
+                      ),
+                      const SizedBox(width: 8),
+                      _ChipButton(
+                        icon: Icons.flip,
+                        label: compact ? null : 'Mirror',
+                        active: controller.symmetry != SymmetryMode.none,
+                        onPressed: onSymmetry,
+                      ),
+                      const SizedBox(width: 8),
+                      _ChipButton(icon: Icons.palette_outlined, label: compact ? null : 'Paper', onPressed: onPaper),
+                      const Spacer(),
+                      _ChipButton(
+                        icon: Icons.play_arrow_rounded,
+                        label: compact ? null : 'Replay',
+                        onPressed: controller.isEmpty ? null : onReplay,
+                      ),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 10),
               // Tools
               Container(
                 padding: const EdgeInsets.all(4),
@@ -570,6 +800,74 @@ class _Toolbar extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _ChipButton extends StatelessWidget {
+  const _ChipButton({required this.icon, this.label, this.onPressed, this.active = false});
+
+  final IconData icon;
+  final String? label;
+  final VoidCallback? onPressed;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final fg = onPressed == null
+        ? scheme.onSurface.withValues(alpha: 0.35)
+        : (active ? scheme.onPrimary : scheme.onSurface);
+    return Material(
+      color: active ? scheme.primary : theme.cardColor,
+      shape: StadiumBorder(side: BorderSide(color: active ? scheme.primary : theme.dividerColor)),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onPressed,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: label == null ? 10 : 12, vertical: 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: fg),
+              if (label != null) ...[
+                const SizedBox(width: 6),
+                Text(label!, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: fg)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PaperSwatch extends StatelessWidget {
+  const _PaperSwatch({required this.color, required this.selected, required this.onTap});
+
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ring = Theme.of(context).colorScheme.onSurface;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 56,
+        height: 72,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? ring : ring.withValues(alpha: 0.15), width: selected ? 2.5 : 1),
+        ),
+        child: selected
+            ? Icon(Icons.check, color: color.computeLuminance() > 0.4 ? Colors.black : Colors.white)
+            : null,
+      ),
     );
   }
 }
@@ -682,7 +980,7 @@ class _SquareButton extends StatelessWidget {
 }
 
 class _RoundIconButton extends StatelessWidget {
-  const _RoundIconButton({required this.icon, this.onPressed, this.enabled});
+  const _RoundIconButton({required this.icon, this.onPressed, this.enabled, this.label});
 
   final IconData icon;
   final VoidCallback? onPressed;
@@ -690,23 +988,36 @@ class _RoundIconButton extends StatelessWidget {
   /// Overrides the dimmed look; defaults to whether [onPressed] is set.
   final bool? enabled;
 
+  /// Optional text shown next to the icon (turns the circle into a pill).
+  final String? label;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isEnabled = enabled ?? onPressed != null;
+    final color = theme.colorScheme.onSurface.withValues(alpha: isEnabled ? 1 : 0.3);
     return Material(
       color: theme.cardColor,
-      shape: CircleBorder(side: BorderSide(color: theme.dividerColor)),
+      shape: StadiumBorder(side: BorderSide(color: theme.dividerColor)),
       child: InkWell(
-        customBorder: const CircleBorder(),
+        customBorder: const StadiumBorder(),
         onTap: onPressed,
         child: SizedBox(
-          width: 36,
           height: 36,
-          child: Icon(
-            icon,
-            size: 20,
-            color: theme.colorScheme.onSurface.withValues(alpha: isEnabled ? 1 : 0.3),
+          width: label == null ? 36 : null,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: label == null ? 0 : 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 20, color: color),
+                if (label != null) ...[
+                  const SizedBox(width: 6),
+                  Text(label!, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
+                ],
+              ],
+            ),
           ),
         ),
       ),

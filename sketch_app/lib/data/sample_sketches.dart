@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../canvas/canvas_controller.dart';
+import '../models/layer.dart';
 import '../models/stroke.dart';
 import '../settings/app_settings.dart';
 import 'drawing_repository.dart';
@@ -21,13 +22,14 @@ class SampleSketches {
     final now = DateTime.now();
     var daysAgo = 0;
     for (final (name, template, strokes) in build()) {
-      final controller = CanvasController(template: template, initial: CanvasSnapshot(strokes: strokes));
+      final layer = Layer(id: Layer.newId(), name: 'Layer 1', strokes: strokes);
+      final controller = CanvasController(template: template, initial: CanvasSnapshot(layers: [layer]));
       try {
         final thumb = await controller.exportPng(CanvasController.referenceSize, pixelRatio: 1.5);
         await repository.save(
           name: name,
           template: template,
-          strokes: strokes,
+          layers: [layer],
           thumbnailPng: thumb,
           timestamp: now.subtract(Duration(days: daysAgo, hours: daysAgo)),
         );

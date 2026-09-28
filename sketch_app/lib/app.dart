@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'billing/billing_service.dart';
+import 'data/backup_service.dart';
 import 'data/drawing_repository.dart';
 import 'screens/home_shell.dart';
 import 'settings/app_settings.dart';
@@ -11,11 +13,15 @@ class AppScope extends InheritedWidget {
     super.key,
     required this.settings,
     required this.repository,
+    required this.billing,
+    required this.backup,
     required super.child,
   });
 
   final AppSettings settings;
   final DrawingRepository repository;
+  final BillingService billing;
+  final BackupService backup;
 
   static AppScope of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<AppScope>();
@@ -28,17 +34,29 @@ class AppScope extends InheritedWidget {
       settings != oldWidget.settings || repository != oldWidget.repository;
 }
 
-class SketchApp extends StatelessWidget {
-  const SketchApp({super.key, required this.settings, required this.repository});
+class SketchApp extends StatefulWidget {
+  const SketchApp({super.key, required this.settings, required this.repository, this.billing});
 
   final AppSettings settings;
   final DrawingRepository repository;
+  final BillingService? billing;
+
+  @override
+  State<SketchApp> createState() => _SketchAppState();
+}
+
+class _SketchAppState extends State<SketchApp> {
+  late final BillingService _billing = widget.billing ?? BillingService(widget.settings);
+  late final BackupService _backup = BackupService(widget.repository);
 
   @override
   Widget build(BuildContext context) {
+    final settings = widget.settings;
     return AppScope(
       settings: settings,
-      repository: repository,
+      repository: widget.repository,
+      billing: _billing,
+      backup: _backup,
       child: ListenableBuilder(
         listenable: settings,
         builder: (context, _) {

@@ -75,6 +75,39 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: settings.setStylusOnly,
               ),
               const SizedBox(height: 20),
+              const _Header('Backup'),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.upload_outlined),
+                title: const Text('Export backup'),
+                subtitle: const Text('Save all sketches as one file to move them to another device.'),
+                onTap: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    await scope.backup.exportAndShare();
+                  } catch (e) {
+                    messenger.showSnackBar(SnackBar(content: Text('Backup failed: $e')));
+                  }
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.download_outlined),
+                title: const Text('Restore backup'),
+                subtitle: const Text('Import a .sketchbackup file. Existing sketches with the same id are replaced.'),
+                onTap: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    final count = await scope.backup.pickAndRestore();
+                    if (count != null) {
+                      messenger.showSnackBar(SnackBar(content: Text('Restored $count sketches')));
+                    }
+                  } catch (e) {
+                    messenger.showSnackBar(SnackBar(content: Text('Restore failed: $e')));
+                  }
+                },
+              ),
+              const SizedBox(height: 20),
               const _Header('Data'),
               ListTile(
                 contentPadding: EdgeInsets.zero,

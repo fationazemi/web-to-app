@@ -7,28 +7,39 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/drawing.dart';
+import '../models/layer.dart';
 import '../models/stroke.dart';
 
 /// A fully loaded drawing, ready to be edited.
 class DrawingDocument {
-  const DrawingDocument({required this.meta, required this.strokes, this.background});
+  const DrawingDocument({required this.meta, required this.layers});
 
   final DrawingMeta meta;
-  final List<Stroke> strokes;
-  final ui.Image? background;
+  final List<Layer> layers;
 }
 
 /// Stores drawings on disk. Each drawing lives in its own folder:
 ///
 /// ```
-/// <documents>/drawings/<id>/meta.json     metadata
-/// <documents>/drawings/<id>/strokes.json  vector strokes
-/// <documents>/drawings/<id>/bg.png        optional raster background
-/// <documents>/drawings/<id>/thumb.png     preview used in lists
+/// <documents>/drawings/<id>/meta.json       metadata
+/// <documents>/drawings/<id>/layers.json     layers with their vector strokes
+/// <documents>/drawings/<id>/bg_<layer>.png  optional raster background per layer
+/// <documents>/drawings/<id>/thumb.png       preview used in lists
 /// ```
+///
+/// Drawings saved by 1.0 (a single `strokes.json` + `bg.png`) still open;
+/// they are migrated to a single layer on the next save.
 class DrawingRepository extends ChangeNotifier {
+  /// Pass [root] to store drawings somewhere specific (tests, custom
+  /// locations); otherwise the app documents directory is used.
+  // ignore: prefer_initializing_formals
+  DrawingRepository({Directory? root}) : _root = root;
+
   Directory? _root;
   final Map<String, DrawingMeta> _items = {};
+
+  /// Where drawings live, `null` when storage is unavailable.
+  Directory? get rootDirectory => _root;
 
   /// All drawings, most recently updated first.
   List<DrawingMeta> get drawings {
@@ -43,25 +54,33 @@ class DrawingRepository extends ChangeNotifier {
 
   Future<void> load() async {
     try {
-      final docs = await getApplicationDocumentsDirectory();
-      final root = Directory('${docs.path}/drawings');
+      final root = _root ?? Directory('${(await getApplicationDocumentsDirectory()).path}/drawings');
       if (!await root.exists()) await root.create(recursive: true);
       _root = root;
-      _items.clear();
-      await for (final entry in root.list()) {
-        if (entry is! Directory) continue;
-        final metaFile = File('${entry.path}/meta.json');
-        if (!await metaFile.exists()) continue;
-        try {
-          final json = jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
-          final meta = DrawingMeta.fromJson(json);
-          _items[meta.id] = meta;
-        } catch (_) {
-          // Skip unreadable entries rather than failing the whole list.
-        }
-      }
+      await reload();
+      return;
     } catch (_) {
       // Without storage the app still works, it just cannot persist.
+    }
+    notifyListeners();
+  }
+
+  /// Re-reads every drawing folder from disk.
+  Future<void> reload() async {
+    final root = _root;
+    if (root == null) return;
+    _items.clear();
+    await for (final entry in root.list()) {
+      if (entry is! Directory) continue;
+      final metaFile = File('${entry.path}/meta.json');
+      if (!await metaFile.exists()) continue;
+      try {
+        final json = jsonDecode(await metaFile.readAsString()) as Map<String, dynamic>;
+        final meta = DrawingMeta.fromJson(json);
+        _items[meta.id] = meta;
+      } catch (_) {
+        // Skip unreadable entries rather than failing the whole list.
+      }
     }
     notifyListeners();
   }
@@ -76,18 +95,34 @@ class DrawingRepository extends ChangeNotifier {
       throw StateError('Drawing $id does not exist');
     }
     final dir = _dir(id);
-    var strokes = const <Stroke>[];
-    final strokesFile = File('${dir.path}/strokes.json');
-    if (await strokesFile.exists()) {
-      final list = jsonDecode(await strokesFile.readAsString()) as List<dynamic>;
-      strokes = [for (final s in list) Stroke.fromJson(s as Map<String, dynamic>)];
+    final layersFile = File('${dir.path}/layers.json');
+    final layers = <Layer>[];
+    if (await layersFile.exists()) {
+      final list = jsonDecode(await layersFile.readAsString()) as List<dynamic>;
+      for (final raw in list) {
+        final json = raw as Map<String, dynamic>;
+        ui.Image? background;
+        if (json['hasBackground'] == true) {
+          final bgFile = File('${dir.path}/bg_${json['id']}.png');
+          if (await bgFile.exists()) background = await decodeImageFromList(await bgFile.readAsBytes());
+        }
+        layers.add(Layer.fromJson(json, background: background));
+      }
+    } else {
+      // Legacy single-layer format.
+      var strokes = const <Stroke>[];
+      final strokesFile = File('${dir.path}/strokes.json');
+      if (await strokesFile.exists()) {
+        final list = jsonDecode(await strokesFile.readAsString()) as List<dynamic>;
+        strokes = [for (final s in list) Stroke.fromJson(s as Map<String, dynamic>)];
+      }
+      ui.Image? background;
+      final bgFile = File('${dir.path}/bg.png');
+      if (await bgFile.exists()) background = await decodeImageFromList(await bgFile.readAsBytes());
+      layers.add(Layer(id: Layer.newId(), name: 'Layer 1', strokes: strokes, background: background));
     }
-    ui.Image? background;
-    final bgFile = File('${dir.path}/bg.png');
-    if (await bgFile.exists()) {
-      background = await decodeImageFromList(await bgFile.readAsBytes());
-    }
-    return DrawingDocument(meta: meta, strokes: strokes, background: background);
+    if (layers.isEmpty) layers.add(Layer(id: Layer.newId(), name: 'Layer 1'));
+    return DrawingDocument(meta: meta, layers: layers);
   }
 
   /// Creates or updates a drawing and returns its metadata.
@@ -95,9 +130,9 @@ class DrawingRepository extends ChangeNotifier {
     String? id,
     required String name,
     required CanvasTemplate template,
-    required List<Stroke> strokes,
-    ui.Image? background,
+    required List<Layer> layers,
     required Uint8List thumbnailPng,
+    int? paperColor,
     DateTime? timestamp,
   }) async {
     final root = _root;
@@ -111,22 +146,32 @@ class DrawingRepository extends ChangeNotifier {
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       template: template,
-      strokeCount: strokes.length,
-      hasBackground: background != null,
+      strokeCount: layers.fold(0, (n, l) => n + l.strokes.length),
+      hasBackground: layers.any((l) => l.background != null),
+      layerCount: layers.length,
+      paperColor: paperColor,
     );
 
     final dir = _dir(meta.id);
     if (!await dir.exists()) await dir.create(recursive: true);
 
-    await File('${dir.path}/strokes.json')
-        .writeAsString(jsonEncode([for (final s in strokes) s.toJson()]));
+    await File('${dir.path}/layers.json')
+        .writeAsString(jsonEncode([for (final l in layers) l.toJson()]));
 
-    final bgFile = File('${dir.path}/bg.png');
-    if (background != null) {
-      final bytes = await background.toByteData(format: ui.ImageByteFormat.png);
-      await bgFile.writeAsBytes(bytes!.buffer.asUint8List());
-    } else if (await bgFile.exists()) {
-      await bgFile.delete();
+    // Write current backgrounds, drop stale ones (and legacy files).
+    final keep = <String>{};
+    for (final layer in layers) {
+      final bg = layer.background;
+      if (bg == null) continue;
+      final file = File('${dir.path}/bg_${layer.id}.png');
+      keep.add(file.path);
+      final bytes = await bg.toByteData(format: ui.ImageByteFormat.png);
+      await file.writeAsBytes(bytes!.buffer.asUint8List());
+    }
+    await for (final entry in dir.list()) {
+      final name = entry.uri.pathSegments.last;
+      final stale = (name.startsWith('bg_') && !keep.contains(entry.path)) || name == 'bg.png' || name == 'strokes.json';
+      if (entry is File && stale) await entry.delete();
     }
 
     final thumb = thumbnailFile(meta.id);
@@ -149,31 +194,36 @@ class DrawingRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Copies a drawing (strokes, background and thumbnail) under a new id.
+  /// Copies a drawing (layers, backgrounds and thumbnail) under a new id.
   Future<DrawingMeta?> duplicate(String id) async {
     final source = _items[id];
     if (source == null || _root == null) return null;
     final now = DateTime.now();
-    final copy = DrawingMeta(
+    final copy = source.copyWith(name: '${source.name} copy', updatedAt: now);
+    final copyMeta = DrawingMeta(
       id: now.microsecondsSinceEpoch.toRadixString(36),
-      name: '${source.name} copy',
+      name: copy.name,
       createdAt: now,
       updatedAt: now,
-      template: source.template,
-      strokeCount: source.strokeCount,
-      hasBackground: source.hasBackground,
+      template: copy.template,
+      strokeCount: copy.strokeCount,
+      hasBackground: copy.hasBackground,
+      layerCount: copy.layerCount,
+      paperColor: copy.paperColor,
     );
     final from = _dir(id);
-    final to = _dir(copy.id);
+    final to = _dir(copyMeta.id);
     await to.create(recursive: true);
-    for (final name in const ['strokes.json', 'bg.png', 'thumb.png']) {
-      final file = File('${from.path}/$name');
-      if (await file.exists()) await file.copy('${to.path}/$name');
+    await for (final entry in from.list()) {
+      if (entry is! File) continue;
+      final name = entry.uri.pathSegments.last;
+      if (name == 'meta.json') continue;
+      await entry.copy('${to.path}/$name');
     }
-    await File('${to.path}/meta.json').writeAsString(jsonEncode(copy.toJson()));
-    _items[copy.id] = copy;
+    await File('${to.path}/meta.json').writeAsString(jsonEncode(copyMeta.toJson()));
+    _items[copyMeta.id] = copyMeta;
     notifyListeners();
-    return copy;
+    return copyMeta;
   }
 
   Future<void> delete(String id) async {

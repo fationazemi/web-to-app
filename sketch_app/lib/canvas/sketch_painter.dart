@@ -2,8 +2,17 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../models/layer.dart';
 import '../models/stroke.dart';
 import 'template_painter.dart';
+
+/// Maps normalized stylus pressure (0..1) to a stroke width multiplier.
+double pressureWidthFactor(double pressure) => 0.35 + 1.0 * pressure.clamp(0.0, 1.0);
+
+/// Ink color for template patterns that stays visible on light and dark
+/// paper.
+Color templateInkFor(Color paper) =>
+    paper.computeLuminance() > 0.4 ? const Color(0x22000000) : const Color(0x33FFFFFF);
 
 /// Draws one stroke onto [canvas]. The stroke's normalized geometry is scaled
 /// to [size].
@@ -66,21 +75,18 @@ void paintStroke(Canvas canvas, Size size, Stroke stroke) {
   canvas.drawPath(path, paint);
 }
 
-/// Maps normalized stylus pressure (0..1) to a stroke width multiplier.
-double pressureWidthFactor(double pressure) => 0.35 + 1.0 * pressure.clamp(0.0, 1.0);
-
-/// Draws the full drawing (paper, template, raster background and strokes).
+/// Draws the full drawing: paper, template, then every visible layer.
 ///
-/// The background and strokes are composited inside a single layer so that
-/// eraser strokes (blend mode clear) only punch through the ink, never the
-/// paper.
+/// Each layer is composited inside its own transparency layer so that
+/// eraser strokes (blend mode clear) only punch through that layer's ink,
+/// never the paper or the layers underneath.
 void paintDrawing(
   Canvas canvas,
   Size size, {
-  required List<Stroke> strokes,
-  Stroke? activeStroke,
-  ui.Image? background,
-  ui.Picture? committedPicture,
+  required List<Layer> layers,
+  int activeIndex = -1,
+  List<Stroke> activeStrokes = const [],
+  ui.Picture Function(Layer layer)? pictureFor,
   CanvasTemplate template = CanvasTemplate.blank,
   Color? paperColor,
   Color templateInk = const Color(0x22000000),
@@ -91,20 +97,29 @@ void paintDrawing(
   }
   paintTemplate(canvas, size, template, templateInk);
 
-  canvas.saveLayer(rect, Paint());
-  if (background != null) {
-    final src = Rect.fromLTWH(0, 0, background.width.toDouble(), background.height.toDouble());
-    canvas.drawImageRect(background, src, rect, Paint()..filterQuality = FilterQuality.medium);
-  }
-  if (committedPicture != null) {
-    canvas.drawPicture(committedPicture);
-  } else {
-    for (final stroke in strokes) {
-      paintStroke(canvas, size, stroke);
+  for (var i = 0; i < layers.length; i++) {
+    final layer = layers[i];
+    if (!layer.visible) continue;
+    canvas.saveLayer(rect, Paint()..color = Colors.white.withValues(alpha: layer.opacity));
+    final bg = layer.background;
+    if (bg != null) {
+      final src = Rect.fromLTWH(0, 0, bg.width.toDouble(), bg.height.toDouble());
+      canvas.drawImageRect(bg, src, rect, Paint()..filterQuality = FilterQuality.medium);
     }
+    if (pictureFor != null) {
+      canvas.drawPicture(pictureFor(layer));
+    } else {
+      for (final stroke in layer.strokes) {
+        paintStroke(canvas, size, stroke);
+      }
+    }
+    if (i == activeIndex) {
+      for (final stroke in activeStrokes) {
+        paintStroke(canvas, size, stroke);
+      }
+    }
+    canvas.restore();
   }
-  if (activeStroke != null) paintStroke(canvas, size, activeStroke);
-  canvas.restore();
 }
 
 /// Records the committed strokes into a reusable [ui.Picture].

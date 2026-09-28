@@ -11,6 +11,8 @@ class DrawingMeta {
     required this.template,
     required this.strokeCount,
     required this.hasBackground,
+    this.layerCount = 1,
+    this.paperColor,
   });
 
   final String id;
@@ -20,6 +22,10 @@ class DrawingMeta {
   final CanvasTemplate template;
   final int strokeCount;
   final bool hasBackground;
+  final int layerCount;
+
+  /// ARGB paper color, `null` for the default paper.
+  final int? paperColor;
 
   DrawingMeta copyWith({
     String? name,
@@ -27,6 +33,8 @@ class DrawingMeta {
     CanvasTemplate? template,
     int? strokeCount,
     bool? hasBackground,
+    int? layerCount,
+    int? paperColor,
   }) {
     return DrawingMeta(
       id: id,
@@ -36,6 +44,8 @@ class DrawingMeta {
       template: template ?? this.template,
       strokeCount: strokeCount ?? this.strokeCount,
       hasBackground: hasBackground ?? this.hasBackground,
+      layerCount: layerCount ?? this.layerCount,
+      paperColor: paperColor ?? this.paperColor,
     );
   }
 
@@ -47,6 +57,8 @@ class DrawingMeta {
         'template': template.name,
         'strokeCount': strokeCount,
         'hasBackground': hasBackground,
+        'layerCount': layerCount,
+        if (paperColor != null) 'paperColor': paperColor,
       };
 
   factory DrawingMeta.fromJson(Map<String, dynamic> json) {
@@ -59,6 +71,8 @@ class DrawingMeta {
       template: CanvasTemplateX.fromName(json['template'] as String?),
       strokeCount: (json['strokeCount'] as num?)?.toInt() ?? 0,
       hasBackground: json['hasBackground'] as bool? ?? false,
+      layerCount: (json['layerCount'] as num?)?.toInt() ?? 1,
+      paperColor: (json['paperColor'] as num?)?.toInt(),
     );
   }
 }
