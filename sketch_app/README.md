@@ -21,6 +21,25 @@ UI, a fast canvas, and a freemium model.
   sketches, custom colors and HD export
 - Four starter sketches (Landscape, Flower, Abstract, Portrait) are generated
   on first launch so the library never opens empty
+- Duplicate a sketch from its menu
+
+## Tablets and stylus
+
+The app is built for phones **and** tablets (iPad, Android tablets):
+
+- Phones stay in portrait; tablets rotate freely (iPad supports all four
+  orientations and Split View).
+- Screens 900dp and wider switch from the bottom bar to a navigation rail.
+- In landscape on a tablet the canvas fills the height and the tools move to
+  a side panel. Grids and lists add columns and keep content centered at a
+  readable width.
+- **Pressure sensitivity** with Apple Pencil, S Pen and other styluses: press
+  harder for thicker lines (can be turned off in Settings).
+- **Palm rejection**: a stylus on the screen takes priority over fingers, and
+  "Draw with stylus only" ignores touches entirely.
+- **Keyboard shortcuts** (iPad keyboards, Chromebooks, desktops):
+  `Cmd/Ctrl+Z` undo, `Shift+Cmd/Ctrl+Z` or `Ctrl+Y` redo, `Cmd/Ctrl+S` save,
+  `P` pen, `B` brush, `E` eraser, `F` fill, `[` / `]` brush size.
 
 ## Design
 
@@ -49,6 +68,7 @@ lib/
   models/                   Stroke, ToolType, CanvasTemplate, DrawingMeta
   screens/                  home shell, home, canvas, drawings, explore, settings
   settings/app_settings.dart    persisted user preferences
+  theme/layout.dart             responsive breakpoints (phone / tablet / wide)
   widgets/                  canvas widget, color picker, dialogs, Pro sheet
 test/                       unit + widget tests
 ```

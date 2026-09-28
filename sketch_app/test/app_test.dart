@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sketch/app.dart';
 import 'package:sketch/data/drawing_repository.dart';
@@ -55,6 +56,49 @@ void main() {
     await tester.tap(find.text('Discard'));
     await tester.pumpAndSettle();
     expect(find.text('Start Drawing'), findsOneWidget);
+  });
+
+  testWidgets('keyboard shortcuts undo and switch tools', (tester) async {
+    await tester.pumpWidget(app());
+    await tester.tap(find.text('Start Drawing'));
+    await tester.pumpAndSettle();
+
+    final center = tester.getCenter(find.byType(SketchCanvas));
+    final gesture = await tester.startGesture(center);
+    await gesture.moveBy(const Offset(50, 20));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyB);
+    await tester.pump();
+    final brushLabel = tester.widget<Text>(find.text('Brush'));
+    expect(brushLabel.style?.color, Theme.of(tester.element(find.text('Brush'))).colorScheme.onPrimary);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyZ);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    final hint = tester.widget<AnimatedOpacity>(
+      find.ancestor(of: find.text('Start drawing'), matching: find.byType(AnimatedOpacity)),
+    );
+    expect(hint.opacity, 1);
+  });
+
+  testWidgets('wide screens use a navigation rail and a side toolbar', (tester) async {
+    tester.view.physicalSize = const Size(1194, 834);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(app());
+    expect(find.byType(NavigationRail), findsOneWidget);
+    expect(find.byType(BottomAppBar), findsNothing);
+
+    await tester.tap(find.text('Start Drawing'));
+    await tester.pumpAndSettle();
+    // Side toolbar: the canvas and the tool strip sit side by side.
+    final canvasRect = tester.getRect(find.byType(SketchCanvas));
+    final toolsRect = tester.getRect(find.text('Clear Canvas'));
+    expect(toolsRect.left, greaterThan(canvasRect.right));
   });
 
   testWidgets('bottom navigation switches tabs', (tester) async {

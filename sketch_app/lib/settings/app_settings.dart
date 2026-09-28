@@ -15,6 +15,8 @@ class AppSettings extends ChangeNotifier {
   bool _showTips = true;
   bool _isPro = false;
   bool _samplesSeeded = false;
+  bool _stylusOnly = false;
+  bool _pressureSensitivity = true;
   File? _file;
 
   ThemeMode get themeMode => _themeMode;
@@ -22,6 +24,12 @@ class AppSettings extends ChangeNotifier {
   bool get showTips => _showTips;
   bool get isPro => _isPro;
   bool get samplesSeeded => _samplesSeeded;
+
+  /// When on, only a stylus draws; fingers are ignored (palm rejection).
+  bool get stylusOnly => _stylusOnly;
+
+  /// Whether stylus pressure changes the stroke width.
+  bool get pressureSensitivity => _pressureSensitivity;
 
   Future<void> load() async {
     try {
@@ -37,6 +45,8 @@ class AppSettings extends ChangeNotifier {
         _showTips = json['showTips'] as bool? ?? true;
         _isPro = json['isPro'] as bool? ?? false;
         _samplesSeeded = json['samplesSeeded'] as bool? ?? false;
+        _stylusOnly = json['stylusOnly'] as bool? ?? false;
+        _pressureSensitivity = json['pressureSensitivity'] as bool? ?? true;
       }
     } catch (_) {
       // Missing or corrupt settings fall back to defaults.
@@ -54,6 +64,8 @@ class AppSettings extends ChangeNotifier {
         'showTips': _showTips,
         'isPro': _isPro,
         'samplesSeeded': _samplesSeeded,
+        'stylusOnly': _stylusOnly,
+        'pressureSensitivity': _pressureSensitivity,
       }));
     } catch (_) {
       // Failing to persist preferences is not fatal.
@@ -81,6 +93,18 @@ class AppSettings extends ChangeNotifier {
   /// Marks the account as Pro. Billing is intentionally not wired up yet:
   /// hook `in_app_purchase` (or RevenueCat) here and call this on a
   /// verified purchase.
+  void setStylusOnly(bool value) {
+    _stylusOnly = value;
+    notifyListeners();
+    _persist();
+  }
+
+  void setPressureSensitivity(bool value) {
+    _pressureSensitivity = value;
+    notifyListeners();
+    _persist();
+  }
+
   void setSamplesSeeded(bool value) {
     _samplesSeeded = value;
     _persist();

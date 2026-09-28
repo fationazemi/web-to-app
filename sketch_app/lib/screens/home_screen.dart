@@ -4,6 +4,7 @@ import '../app.dart';
 import '../models/drawing.dart';
 import '../models/stroke.dart';
 import '../theme/app_theme.dart';
+import '../theme/layout.dart';
 import '../widgets/brush_stroke.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/drawing_thumbnail.dart';
@@ -21,7 +22,7 @@ class HomeScreen extends StatelessWidget {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 20,
+        titleSpacing: Layout.pagePadding(context).left,
         toolbarHeight: 76,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -33,16 +34,19 @@ class HomeScreen extends StatelessWidget {
             ),
           ],
         ),
-        actions: const [
-          Padding(padding: EdgeInsets.only(right: 20), child: _Avatar()),
+        actions: [
+          Padding(padding: EdgeInsets.only(right: Layout.pagePadding(context).right), child: const _Avatar()),
         ],
       ),
       body: ListenableBuilder(
         listenable: Listenable.merge([scope.repository, scope.settings]),
         builder: (context, _) {
           final recent = scope.repository.drawings.take(8).toList();
+          final tablet = Layout.isTablet(context);
+          final cardSize = tablet ? 140.0 : 108.0;
+          final side = Layout.pagePadding(context);
           return ListView(
-            padding: EdgeInsets.fromLTRB(20, 4, 20, 24 + MediaQuery.paddingOf(context).bottom + 70),
+            padding: EdgeInsets.fromLTRB(side.left, 4, side.right, 24 + MediaQuery.paddingOf(context).bottom + 70),
             children: [
               const _HeroCard(),
               const SizedBox(height: 28),
@@ -52,13 +56,13 @@ class HomeScreen extends StatelessWidget {
                 const _EmptyRecent()
               else
                 SizedBox(
-                  height: 156,
+                  height: cardSize + 48,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     clipBehavior: Clip.none,
                     itemCount: recent.length,
                     separatorBuilder: (_, _) => const SizedBox(width: 14),
-                    itemBuilder: (context, i) => _RecentCard(meta: recent[i]),
+                    itemBuilder: (context, i) => _RecentCard(meta: recent[i], size: cardSize),
                   ),
                 ),
               const SizedBox(height: 28),
@@ -222,15 +226,16 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _RecentCard extends StatelessWidget {
-  const _RecentCard({required this.meta});
+  const _RecentCard({required this.meta, this.size = 108});
 
   final DrawingMeta meta;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SizedBox(
-      width: 108,
+      width: size,
       child: InkWell(
         onTap: () => Navigator.of(context).push(CanvasScreen.route(existing: meta)),
         borderRadius: BorderRadius.circular(14),
@@ -238,8 +243,8 @@ class _RecentCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 108,
-              height: 108,
+              width: size,
+              height: size,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: softShadow(context, blur: 12, y: 4),
@@ -295,6 +300,8 @@ class DrawingMenu extends StatelessWidget {
             case 'rename':
               final name = await showNameDialog(context, title: 'Rename sketch', initial: meta.name);
               if (name != null) await repository.rename(meta.id, name);
+            case 'duplicate':
+              await repository.duplicate(meta.id);
             case 'delete':
               final ok = await showConfirmDialog(
                 context,
@@ -307,6 +314,7 @@ class DrawingMenu extends StatelessWidget {
         itemBuilder: (context) => const [
           PopupMenuItem(value: 'open', child: Text('Open')),
           PopupMenuItem(value: 'rename', child: Text('Rename')),
+          PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
           PopupMenuItem(value: 'delete', child: Text('Delete')),
         ],
       ),

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../canvas/canvas_controller.dart';
@@ -8,10 +9,24 @@ import 'brush_stroke.dart';
 
 /// The interactive drawing surface. Keeps a 3:4 aspect ratio and forwards
 /// pointer events to the [CanvasController] in normalized coordinates.
+///
+/// Stylus input (Apple Pencil, S Pen, ...) gets pressure-sensitive strokes
+/// and takes priority over touches, so a resting palm never draws.
 class SketchCanvas extends StatefulWidget {
-  const SketchCanvas({super.key, required this.controller});
+  const SketchCanvas({
+    super.key,
+    required this.controller,
+    this.stylusOnly = false,
+    this.pressureSensitivity = true,
+  });
 
   final CanvasController controller;
+
+  /// Ignore finger input entirely; only a stylus (or mouse) draws.
+  final bool stylusOnly;
+
+  /// Whether stylus pressure changes the stroke width.
+  final bool pressureSensitivity;
 
   /// Aspect ratio (width / height) of every canvas in the app.
   static const double aspectRatio = 3 / 4;
@@ -22,12 +37,30 @@ class SketchCanvas extends StatefulWidget {
 
 class _SketchCanvasState extends State<SketchCanvas> {
   int? _activePointer;
+  PointerDeviceKind? _activeKind;
   bool _filling = false;
 
   Offset _normalize(Offset local, Size size) => Offset(
         (local.dx / size.width).clamp(0.0, 1.0),
         (local.dy / size.height).clamp(0.0, 1.0),
       );
+
+  /// Normalized pressure for stylus events, `null` for everything else.
+  double? _pressure(PointerEvent event) {
+    if (!widget.pressureSensitivity || event.kind != PointerDeviceKind.stylus) return null;
+    final range = event.pressureMax - event.pressureMin;
+    if (range <= 0) return null;
+    return ((event.pressure - event.pressureMin) / range).clamp(0.0, 1.0);
+  }
+
+  bool _accepts(PointerEvent event) {
+    if (event.kind == PointerDeviceKind.touch) {
+      if (widget.stylusOnly) return false;
+      // A stylus already on the surface wins over touches (palm rejection).
+      if (_activeKind == PointerDeviceKind.stylus) return false;
+    }
+    return true;
+  }
 
   Future<void> _fill(Offset normalized) async {
     if (_filling) return;
@@ -37,6 +70,38 @@ class _SketchCanvasState extends State<SketchCanvas> {
     } finally {
       if (mounted) setState(() => _filling = false);
     }
+  }
+
+  void _down(PointerDownEvent event, Size size) {
+    if (!_accepts(event)) return;
+    if (_activePointer != null) {
+      // A stylus arriving mid-touch replaces the finger stroke.
+      if (event.kind == PointerDeviceKind.stylus && _activeKind == PointerDeviceKind.touch) {
+        widget.controller.cancelStroke();
+      } else {
+        return;
+      }
+    }
+    final p = _normalize(event.localPosition, size);
+    if (widget.controller.tool == ToolType.fill) {
+      _fill(p);
+      return;
+    }
+    _activePointer = event.pointer;
+    _activeKind = event.kind;
+    widget.controller.beginStroke(p, size, pressure: _pressure(event));
+  }
+
+  void _move(PointerMoveEvent event, Size size) {
+    if (event.pointer != _activePointer) return;
+    widget.controller.extendStroke(_normalize(event.localPosition, size), pressure: _pressure(event));
+  }
+
+  void _up(PointerEvent event) {
+    if (event.pointer != _activePointer) return;
+    _activePointer = null;
+    _activeKind = null;
+    widget.controller.endStroke();
   }
 
   @override
@@ -55,30 +120,10 @@ class _SketchCanvasState extends State<SketchCanvas> {
             borderRadius: BorderRadius.circular(14),
             child: Listener(
               behavior: HitTestBehavior.opaque,
-              onPointerDown: (event) {
-                if (_activePointer != null) return;
-                final p = _normalize(event.localPosition, size);
-                if (widget.controller.tool == ToolType.fill) {
-                  _fill(p);
-                  return;
-                }
-                _activePointer = event.pointer;
-                widget.controller.beginStroke(p, size);
-              },
-              onPointerMove: (event) {
-                if (event.pointer != _activePointer) return;
-                widget.controller.extendStroke(_normalize(event.localPosition, size));
-              },
-              onPointerUp: (event) {
-                if (event.pointer != _activePointer) return;
-                _activePointer = null;
-                widget.controller.endStroke();
-              },
-              onPointerCancel: (event) {
-                if (event.pointer != _activePointer) return;
-                _activePointer = null;
-                widget.controller.endStroke();
-              },
+              onPointerDown: (event) => _down(event, size),
+              onPointerMove: (event) => _move(event, size),
+              onPointerUp: _up,
+              onPointerCancel: _up,
               child: Stack(
                 fit: StackFit.expand,
                 children: [

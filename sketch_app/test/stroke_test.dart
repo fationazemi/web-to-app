@@ -20,6 +20,23 @@ void main() {
     expect(restored.points, stroke.points);
   });
 
+  test('Stylus pressure survives a JSON round trip and is optional', () {
+    const stroke = Stroke(
+      tool: ToolType.pen,
+      color: Color(0xFF000000),
+      width: 0.02,
+      points: [Offset(0.1, 0.1), Offset(0.2, 0.2)],
+      pressures: [0.2, 0.9],
+    );
+    final restored = Stroke.fromJson(stroke.toJson());
+    expect(restored.pressures, [0.2, 0.9]);
+    expect(restored.hasPressure, isTrue);
+
+    const finger = Stroke(tool: ToolType.pen, color: Color(0xFF000000), width: 0.02, points: [Offset(0, 0)]);
+    expect(finger.toJson().containsKey('pressures'), isFalse);
+    expect(Stroke.fromJson(finger.toJson()).hasPressure, isFalse);
+  });
+
   test('Unknown tool and template names fall back safely', () {
     expect(ToolTypeX.fromName('laser'), ToolType.pen);
     expect(CanvasTemplateX.fromName(null), CanvasTemplate.blank);

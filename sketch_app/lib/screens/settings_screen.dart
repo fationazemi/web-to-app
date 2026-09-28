@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_theme.dart';
+import '../theme/layout.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/pro_sheet.dart';
 
@@ -16,14 +17,15 @@ class SettingsScreen extends StatelessWidget {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 20,
+        titleSpacing: Layout.pagePadding(context, maxWidth: Layout.narrowContentMaxWidth).left,
         title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 24)),
       ),
       body: ListenableBuilder(
         listenable: settings,
         builder: (context, _) {
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+            padding: Layout.pagePadding(context, maxWidth: Layout.narrowContentMaxWidth)
+                .copyWith(top: 4, bottom: 24 + MediaQuery.paddingOf(context).bottom + 70),
             children: [
               _ProCard(isPro: settings.isPro),
               const SizedBox(height: 20),
@@ -55,6 +57,22 @@ class SettingsScreen extends StatelessWidget {
                 title: const Text('Show tips on Home'),
                 value: settings.showTips,
                 onChanged: settings.setShowTips,
+              ),
+              const SizedBox(height: 20),
+              const _Header('Stylus'),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Pressure sensitivity'),
+                subtitle: const Text('Press harder with Apple Pencil or S Pen for thicker lines.'),
+                value: settings.pressureSensitivity,
+                onChanged: settings.setPressureSensitivity,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Draw with stylus only'),
+                subtitle: const Text('Ignore fingers so you can rest your palm on the screen.'),
+                value: settings.stylusOnly,
+                onChanged: settings.setStylusOnly,
               ),
               const SizedBox(height: 20),
               const _Header('Data'),

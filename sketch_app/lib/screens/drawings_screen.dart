@@ -4,6 +4,7 @@ import '../app.dart';
 import '../models/drawing.dart';
 import '../models/stroke.dart';
 import '../settings/app_settings.dart';
+import '../theme/layout.dart';
 import '../widgets/drawing_thumbnail.dart';
 import 'canvas_screen.dart';
 import 'home_screen.dart';
@@ -17,7 +18,7 @@ class DrawingsScreen extends StatelessWidget {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 20,
+        titleSpacing: Layout.pagePadding(context).left,
         title: const Text('My Drawings', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 24)),
         actions: [
           ListenableBuilder(
@@ -26,7 +27,7 @@ class DrawingsScreen extends StatelessWidget {
               final count = scope.repository.count;
               final label = scope.settings.isPro ? '$count sketches' : '$count / ${AppSettings.freeDrawingLimit}';
               return Padding(
-                padding: const EdgeInsets.only(right: 20),
+                padding: EdgeInsets.only(right: Layout.pagePadding(context).right),
                 child: Text(label, style: theme.textTheme.labelMedium),
               );
             },
@@ -38,10 +39,12 @@ class DrawingsScreen extends StatelessWidget {
         builder: (context, _) {
           final drawings = scope.repository.drawings;
           if (drawings.isEmpty) return const _EmptyState();
+          final side = Layout.pagePadding(context, maxWidth: 1040);
+          final width = MediaQuery.sizeOf(context).width - side.horizontal;
           return GridView.builder(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
+            padding: side.copyWith(top: 4, bottom: 24 + MediaQuery.paddingOf(context).bottom + 70),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: Layout.columns(width),
               mainAxisSpacing: 16,
               crossAxisSpacing: 16,
               childAspectRatio: 0.72,

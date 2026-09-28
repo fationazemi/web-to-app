@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -11,6 +12,7 @@ import '../models/drawing.dart';
 import '../models/stroke.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_theme.dart';
+import '../theme/layout.dart';
 import '../widgets/color_picker_dialog.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/pro_sheet.dart';
@@ -273,6 +275,91 @@ class _CanvasScreenState extends State<CanvasScreen> {
   // UI
   // ---------------------------------------------------------------------------
 
+  /// Keyboard shortcuts for iPad keyboards, Chromebooks and desktops.
+  Map<ShortcutActivator, VoidCallback> _shortcuts(CanvasController c) => {
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true): c.undo,
+        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true): c.undo,
+        const SingleActivator(LogicalKeyboardKey.keyZ, control: true, shift: true): c.redo,
+        const SingleActivator(LogicalKeyboardKey.keyZ, meta: true, shift: true): c.redo,
+        const SingleActivator(LogicalKeyboardKey.keyY, control: true): c.redo,
+        const SingleActivator(LogicalKeyboardKey.keyS, control: true): _save,
+        const SingleActivator(LogicalKeyboardKey.keyS, meta: true): _save,
+        const SingleActivator(LogicalKeyboardKey.keyP): () => c.setTool(ToolType.pen),
+        const SingleActivator(LogicalKeyboardKey.keyB): () => c.setTool(ToolType.brush),
+        const SingleActivator(LogicalKeyboardKey.keyE): () => c.setTool(ToolType.eraser),
+        const SingleActivator(LogicalKeyboardKey.keyF): () => c.setTool(ToolType.fill),
+        const SingleActivator(LogicalKeyboardKey.bracketLeft): () => c.setStrokeWidth((c.strokeWidth - 2).clamp(1, 40)),
+        const SingleActivator(LogicalKeyboardKey.bracketRight): () => c.setStrokeWidth((c.strokeWidth + 2).clamp(1, 40)),
+      };
+
+  Widget _body(CanvasController controller) {
+    final settings = AppScope.of(context).settings;
+    final canvas = Center(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: softShadow(context, blur: 20, y: 8, alpha: 0.08),
+        ),
+        child: ListenableBuilder(
+          listenable: settings,
+          builder: (context, _) => SketchCanvas(
+            controller: controller,
+            stylusOnly: settings.stylusOnly,
+            pressureSensitivity: settings.pressureSensitivity,
+          ),
+        ),
+      ),
+    );
+    final toolbar = _Toolbar(
+      controller: controller,
+      busy: _busy,
+      onCustomColor: _pickCustomColor,
+      onImport: _importImage,
+      onClear: _clear,
+      onShare: _share,
+    );
+
+    return CallbackShortcuts(
+      bindings: _shortcuts(controller),
+      child: Focus(
+        autofocus: true,
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final landscape = constraints.maxWidth > constraints.maxHeight;
+              // Tablets in landscape (and desktops) get the tools beside the
+              // canvas so the drawing area uses the full height.
+              if (landscape && constraints.maxWidth >= 700) {
+                return Row(
+                  children: [
+                    Expanded(child: Padding(padding: const EdgeInsets.fromLTRB(24, 8, 12, 24), child: canvas)),
+                    SizedBox(
+                      width: 364,
+                      child: Center(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.fromLTRB(8, 8, 24, 24),
+                          child: toolbar,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }
+              final wide = constraints.maxWidth > Layout.contentMaxWidth;
+              final side = wide ? (constraints.maxWidth - Layout.contentMaxWidth) / 2 : 16.0;
+              return Column(
+                children: [
+                  Expanded(child: Padding(padding: EdgeInsets.fromLTRB(side, 4, side, 8), child: canvas)),
+                  Padding(padding: EdgeInsets.symmetric(horizontal: wide ? side - 16 : 0), child: toolbar),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
@@ -357,34 +444,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
             ? Center(child: Text(_loadError!))
             : controller == null
                 ? const Center(child: CircularProgressIndicator())
-                : SafeArea(
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                            child: Center(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(14),
-                                  boxShadow: softShadow(context, blur: 20, y: 8, alpha: 0.08),
-                                ),
-                                child: SketchCanvas(controller: controller),
-                              ),
-                            ),
-                          ),
-                        ),
-                        _Toolbar(
-                          controller: controller,
-                          busy: _busy,
-                          onCustomColor: _pickCustomColor,
-                          onImport: _importImage,
-                          onClear: _clear,
-                          onShare: _share,
-                        ),
-                      ],
-                    ),
-                  ),
+                : _body(controller),
       ),
     );
   }

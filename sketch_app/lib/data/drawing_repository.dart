@@ -149,6 +149,33 @@ class DrawingRepository extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Copies a drawing (strokes, background and thumbnail) under a new id.
+  Future<DrawingMeta?> duplicate(String id) async {
+    final source = _items[id];
+    if (source == null || _root == null) return null;
+    final now = DateTime.now();
+    final copy = DrawingMeta(
+      id: now.microsecondsSinceEpoch.toRadixString(36),
+      name: '${source.name} copy',
+      createdAt: now,
+      updatedAt: now,
+      template: source.template,
+      strokeCount: source.strokeCount,
+      hasBackground: source.hasBackground,
+    );
+    final from = _dir(id);
+    final to = _dir(copy.id);
+    await to.create(recursive: true);
+    for (final name in const ['strokes.json', 'bg.png', 'thumb.png']) {
+      final file = File('${from.path}/$name');
+      if (await file.exists()) await file.copy('${to.path}/$name');
+    }
+    await File('${to.path}/meta.json').writeAsString(jsonEncode(copy.toJson()));
+    _items[copy.id] = copy;
+    notifyListeners();
+    return copy;
+  }
+
   Future<void> delete(String id) async {
     _items.remove(id);
     notifyListeners();

@@ -51,6 +51,7 @@ class CanvasController extends ChangeNotifier {
 
   Stroke? _active;
   List<Offset>? _activePoints;
+  List<double>? _activePressures;
 
   /// Bumped whenever the committed content changes; used to invalidate the
   /// cached picture of committed strokes.
@@ -107,33 +108,42 @@ class CanvasController extends ChangeNotifier {
 
   /// Starts a stroke at [normalized] (0..1 canvas coordinates). [size] is the
   /// on-screen canvas size, used to convert the pixel width to a fraction.
-  void beginStroke(Offset normalized, Size size) {
+  ///
+  /// Pass [pressure] (normalized 0..1) for stylus input to get a
+  /// pressure-sensitive stroke; leave it `null` for finger or mouse input.
+  void beginStroke(Offset normalized, Size size, {double? pressure}) {
     if (tool == ToolType.fill || size.width <= 0) return;
     final points = [normalized];
+    final pressures = pressure == null ? null : [pressure];
     _activePoints = points;
+    _activePressures = pressures;
     _active = Stroke(
       tool: tool,
       color: color,
       width: strokeWidth / size.width,
       points: points,
+      pressures: pressures,
     );
     notifyListeners();
   }
 
-  void extendStroke(Offset normalized) {
+  void extendStroke(Offset normalized, {double? pressure}) {
     final points = _activePoints;
     if (points == null) return;
     // Skip points that would not be visible; keeps the stroke data compact.
     if ((points.last - normalized).distance < 0.0008) return;
     points.add(normalized);
+    _activePressures?.add(pressure ?? _activePressures!.last);
     notifyListeners();
   }
 
   void endStroke() {
     final active = _active;
     final points = _activePoints;
+    final pressures = _activePressures;
     _active = null;
     _activePoints = null;
+    _activePressures = null;
     if (active == null || points == null || points.isEmpty) {
       notifyListeners();
       return;
@@ -143,6 +153,7 @@ class CanvasController extends ChangeNotifier {
       color: active.color,
       width: active.width,
       points: List.unmodifiable(points),
+      pressures: pressures == null ? null : List.unmodifiable(pressures),
     );
     _commit(CanvasSnapshot(
       background: _current.background,
@@ -153,6 +164,7 @@ class CanvasController extends ChangeNotifier {
   void cancelStroke() {
     _active = null;
     _activePoints = null;
+    _activePressures = null;
     notifyListeners();
   }
 

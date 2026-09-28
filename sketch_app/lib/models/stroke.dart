@@ -55,6 +55,7 @@ class Stroke {
     required this.color,
     required this.width,
     required this.points,
+    this.pressures,
   });
 
   final ToolType tool;
@@ -62,7 +63,13 @@ class Stroke {
   final double width;
   final List<Offset> points;
 
+  /// Optional normalized stylus pressure (0..1) per point. `null` for
+  /// strokes drawn with a finger or mouse, which render at constant width.
+  final List<double>? pressures;
+
   bool get isEraser => tool == ToolType.eraser;
+
+  bool get hasPressure => pressures != null && pressures!.length == points.length && points.length > 1;
 
   Map<String, dynamic> toJson() => {
         'tool': tool.name,
@@ -71,6 +78,7 @@ class Stroke {
         'points': [
           for (final p in points) ...[p.dx, p.dy],
         ],
+        if (pressures != null) 'pressures': pressures,
       };
 
   factory Stroke.fromJson(Map<String, dynamic> json) {
@@ -79,11 +87,13 @@ class Stroke {
     for (var i = 0; i + 1 < raw.length; i += 2) {
       points.add(Offset(raw[i].toDouble(), raw[i + 1].toDouble()));
     }
+    final rawPressures = (json['pressures'] as List<dynamic>?)?.cast<num>();
     return Stroke(
       tool: ToolTypeX.fromName(json['tool'] as String?),
       color: Color((json['color'] as num?)?.toInt() ?? 0xFF000000),
       width: (json['width'] as num?)?.toDouble() ?? 0.02,
       points: points,
+      pressures: rawPressures == null ? null : [for (final v in rawPressures) v.toDouble()],
     );
   }
 }

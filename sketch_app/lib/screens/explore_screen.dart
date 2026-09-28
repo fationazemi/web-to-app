@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/stroke.dart';
 import '../theme/app_theme.dart';
+import '../theme/layout.dart';
 import 'canvas_screen.dart';
 
 const _prompts = <String>[
@@ -48,11 +49,11 @@ class ExploreScreen extends StatelessWidget {
     final dark = theme.brightness == Brightness.dark;
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 20,
+        titleSpacing: Layout.pagePadding(context).left,
         title: const Text('Explore', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 24)),
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        padding: Layout.pagePadding(context).copyWith(top: 4, bottom: 24 + MediaQuery.paddingOf(context).bottom + 70),
         children: [
           Container(
             padding: const EdgeInsets.all(20),

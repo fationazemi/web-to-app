@@ -41,6 +41,18 @@ void paintStroke(Canvas canvas, Size size, Stroke stroke) {
     return;
   }
 
+  if (stroke.hasPressure) {
+    // Stylus strokes: vary the width per segment with the pen pressure.
+    final pressures = stroke.pressures!;
+    final base = paint.strokeWidth;
+    for (var i = 0; i < points.length - 1; i++) {
+      final p = (pressures[i] + pressures[i + 1]) / 2;
+      paint.strokeWidth = base * pressureWidthFactor(p);
+      canvas.drawLine(points[i], points[i + 1], paint);
+    }
+    return;
+  }
+
   // Smooth the polyline by drawing quadratic curves through the midpoints.
   final path = Path()..moveTo(points.first.dx, points.first.dy);
   for (var i = 1; i < points.length - 1; i++) {
@@ -53,6 +65,9 @@ void paintStroke(Canvas canvas, Size size, Stroke stroke) {
   path.lineTo(points.last.dx, points.last.dy);
   canvas.drawPath(path, paint);
 }
+
+/// Maps normalized stylus pressure (0..1) to a stroke width multiplier.
+double pressureWidthFactor(double pressure) => 0.35 + 1.0 * pressure.clamp(0.0, 1.0);
 
 /// Draws the full drawing (paper, template, raster background and strokes).
 ///

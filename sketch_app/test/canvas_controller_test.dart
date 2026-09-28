@@ -55,6 +55,18 @@ void main() {
     expect(c.canRedo, isFalse);
   });
 
+  test('stylus strokes record pressure per point', () async {
+    final c = controller();
+    c.beginStroke(const Offset(0.1, 0.1), size, pressure: 0.3);
+    c.extendStroke(const Offset(0.3, 0.3), pressure: 0.8);
+    c.extendStroke(const Offset(0.5, 0.5)); // missing pressure repeats the last one
+    c.endStroke();
+    expect(c.strokes.single.pressures, [0.3, 0.8, 0.8]);
+    // Pressure-sensitive strokes render without errors.
+    final bytes = await c.exportPng(size, pixelRatio: 1);
+    expect(bytes, isNotEmpty);
+  });
+
   test('the fill tool does not create strokes', () {
     final c = controller()..setTool(ToolType.fill);
     c.beginStroke(const Offset(0.5, 0.5), size);
