@@ -27,10 +27,12 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - name: Build release APK (unsigned)
-        run: flutter build apk --release
-        env:
-          SKETCH_AI_PROXY_URL: ${{ secrets.SKETCH_AI_PROXY_URL }}
-          SKETCH_AI_APP_TOKEN: ${{ secrets.SKETCH_AI_APP_TOKEN }}
+        # The proxy URL and app token are optional repository secrets; when
+        # they are unset the APK falls back to the key entered in Settings.
+        run: >-
+          flutter build apk --release
+          --dart-define=SKETCH_AI_PROXY_URL=${{ secrets.SKETCH_AI_PROXY_URL }}
+          --dart-define=SKETCH_AI_APP_TOKEN=${{ secrets.SKETCH_AI_APP_TOKEN }}
       - uses: actions/upload-artifact@v4
         with:
           name: sketch-release-apk
