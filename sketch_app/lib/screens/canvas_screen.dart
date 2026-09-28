@@ -63,6 +63,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
       if (existing == null) {
         controller = CanvasController(
           template: widget.template,
+          color: AppColors.palette.first,
           strokeWidth: scope.settings.defaultStrokeWidth,
         );
       } else {
@@ -70,6 +71,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
         controller = CanvasController(
           template: doc.meta.template,
           initial: CanvasSnapshot(background: doc.background, strokes: doc.strokes),
+          color: AppColors.palette.first,
           strokeWidth: scope.settings.defaultStrokeWidth,
         );
       }
