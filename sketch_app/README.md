@@ -32,6 +32,39 @@ UI, a fast canvas, and a freemium model.
 - Four starter sketches (Landscape, Flower, Abstract, Portrait) are generated
   on first launch so the library never opens empty
 - App icon and native splash screen generated from the same brush-stroke art
+- **Sketch AI** (Claude): drawing ideas from your mood, time and level; a
+  step-by-step guide shown over the canvas; feedback on your sketch (vision);
+  and a streaming chat. 5 free requests per day, unlimited with Pro
+
+## Sketch AI
+
+The assistant lives in `lib/ai/` and talks to the Claude Messages API over
+plain HTTP (`package:http`), since there is no official Dart SDK.
+
+| Feature | Endpoint usage |
+|---|---|
+| **What to draw** (Explore › Sketch AI) | structured output (`output_config.format` JSON schema) → five idea cards with steps and a palette; "Draw this" opens the canvas with the steps as a guide |
+| **Guide me step by step** (canvas › Sketch AI) | structured output → tutorial steps shown above the tools with Back / Next |
+| **Feedback on this sketch** (canvas › Sketch AI) | the canvas PNG is sent as a base64 `image` block; structured output → strengths, three improvements, next exercise |
+| **Chat** | `stream: true`, Server-Sent Events parsed line by line, text shown as it arrives |
+
+Every request uses `claude-opus-5` with adaptive thinking (the model's
+default), `output_config.effort` (`medium` for ideas/feedback/tutorials,
+`low` for chat) and opts into Anthropic's server-side refusal fallback
+(`fallbacks: "default"` with the `server-side-fallback-2026-07-01` beta), so a
+declined request is retried on a fallback model instead of failing.
+
+**Configuration** (Settings › Sketch AI):
+
+- *Development*: paste a Claude API key. It is stored in the app's private
+  documents folder, never shared, and only sent to the endpoint below.
+- *Production*: do **not** ship a key in the app. Deploy a small proxy that
+  holds the key and forwards `POST /v1/messages` unchanged (add rate limiting
+  and your own auth), then set its URL as the endpoint and leave the key
+  empty. The app sends exactly the same request body to the proxy.
+
+Prompts are in `lib/ai/prompts.dart`; keep them stable because the system
+prompt is a cache prefix on the API side.
 
 ## Tablets and stylus
 
@@ -69,6 +102,11 @@ The app is built for phones **and** tablets (iPad, Android tablets):
 lib/
   main.dart                 entry point, loads settings + repository
   app.dart                  MaterialApp, AppScope (DI via InheritedWidget)
+  ai/
+    ai_service.dart         Claude Messages API over HTTP (ideas, tutorial,
+                            critique with vision, streaming chat)
+    ai_gate.dart            configuration + free-quota checks around a call
+    prompts.dart            system prompts
   billing/billing_service.dart  App Store / Play billing for Pro
   canvas/
     canvas_controller.dart  tool state, layers, symmetry, undo/redo, raster ops

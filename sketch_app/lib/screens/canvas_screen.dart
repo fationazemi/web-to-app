@@ -6,21 +6,25 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../ai/ai_gate.dart';
 import '../app.dart';
 import '../canvas/canvas_controller.dart';
 import '../canvas/timelapse.dart';
+import '../models/ai.dart';
 import '../models/drawing.dart';
 import '../models/layer.dart';
 import '../models/stroke.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_theme.dart';
 import '../theme/layout.dart';
+import '../widgets/ai_sheets.dart';
 import '../widgets/color_picker_dialog.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/layers_sheet.dart';
 import '../widgets/pro_sheet.dart';
 import '../widgets/replay_dialog.dart';
 import '../widgets/sketch_canvas.dart';
+import 'ai_screen.dart';
 
 /// The drawing editor. Opens either an existing drawing ([existing]) or a
 /// fresh canvas with the given [template].
@@ -30,15 +34,24 @@ class CanvasScreen extends StatefulWidget {
     this.existing,
     this.template = CanvasTemplate.blank,
     this.initialName,
+    this.tutorial,
   });
 
   final DrawingMeta? existing;
   final CanvasTemplate template;
   final String? initialName;
 
-  static Route<void> route({DrawingMeta? existing, CanvasTemplate template = CanvasTemplate.blank, String? initialName}) {
+  /// A step-by-step guide to show above the tools (from Sketch AI).
+  final Tutorial? tutorial;
+
+  static Route<void> route({
+    DrawingMeta? existing,
+    CanvasTemplate template = CanvasTemplate.blank,
+    String? initialName,
+    Tutorial? tutorial,
+  }) {
     return MaterialPageRoute(
-      builder: (_) => CanvasScreen(existing: existing, template: template, initialName: initialName),
+      builder: (_) => CanvasScreen(existing: existing, template: template, initialName: initialName, tutorial: tutorial),
     );
   }
 
@@ -54,12 +67,15 @@ class _CanvasScreenState extends State<CanvasScreen> {
   String? _loadError;
   bool _busy = false;
   double? _progress;
+  Tutorial? _tutorial;
+  int _tutorialStep = 0;
 
   @override
   void initState() {
     super.initState();
     _id = widget.existing?.id;
     _name = widget.existing?.name ?? widget.initialName;
+    _tutorial = widget.tutorial;
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
@@ -368,6 +384,79 @@ class _CanvasScreenState extends State<CanvasScreen> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Sketch AI
+  // ---------------------------------------------------------------------------
+
+  Future<void> _openAi() async {
+    final controller = _controller;
+    if (controller == null) return;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.rate_review_outlined),
+              title: const Text('Feedback on this sketch'),
+              subtitle: const Text('What works and three things to try now'),
+              enabled: !controller.isEmpty,
+              onTap: () => Navigator.pop(context, 'feedback'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.format_list_numbered_rounded),
+              title: const Text('Guide me step by step'),
+              subtitle: const Text('Tell Sketch AI what you want to draw'),
+              onTap: () => Navigator.pop(context, 'guide'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.chat_bubble_outline_rounded),
+              title: const Text('Ask Sketch AI'),
+              subtitle: const Text('Chat about this drawing'),
+              onTap: () => Navigator.pop(context, 'chat'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case 'feedback':
+        await _aiFeedback(controller);
+      case 'guide':
+        await _aiGuide();
+      case 'chat':
+        Navigator.of(context).push(AiScreen.route(
+          initialTab: 1,
+          chatContext: 'The user is in the editor drawing "${_name ?? 'an untitled sketch'}" '
+              'with ${controller.layers.length} layer(s) and ${controller.strokeCount} strokes so far.',
+        ));
+    }
+  }
+
+  Future<void> _aiFeedback(CanvasController controller) async {
+    final feedback = await _guard(() async {
+      final png = await controller.exportPng(CanvasController.referenceSize, pixelRatio: 2);
+      if (!mounted) return null;
+      return runAi(context, (ai) => ai.critique(png, title: _name));
+    });
+    if (feedback != null && mounted) await showFeedbackSheet(context, feedback);
+  }
+
+  Future<void> _aiGuide() async {
+    final subject = await showNameDialog(context, title: 'What do you want to draw?', initial: _name ?? '');
+    if (subject == null || subject.trim().isEmpty || !mounted) return;
+    final tutorial = await _guard(() => runAi(context, (ai) => ai.tutorial(subject)));
+    if (tutorial == null || tutorial.steps.isEmpty || !mounted) return;
+    setState(() {
+      _tutorial = tutorial;
+      _tutorialStep = 0;
+      _name ??= subject.trim();
+    });
+  }
+
   Future<void> _handlePop() async {
     final controller = _controller;
     if (controller == null || !controller.dirty) {
@@ -475,7 +564,18 @@ class _CanvasScreenState extends State<CanvasScreen> {
       onSymmetry: _pickSymmetry,
       onPaper: _pickPaper,
       onReplay: () => showReplayDialog(context, controller),
+      onAi: _openAi,
     );
+    final tutorial = _tutorial;
+    final guide = tutorial == null
+        ? null
+        : TutorialGuide(
+            tutorial: tutorial,
+            index: _tutorialStep.clamp(0, tutorial.steps.length - 1),
+            onPrevious: () => setState(() => _tutorialStep--),
+            onNext: () => setState(() => _tutorialStep++),
+            onClose: () => setState(() => _tutorial = null),
+          );
 
     return CallbackShortcuts(
       bindings: _shortcuts(controller),
@@ -496,7 +596,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
                       child: Center(
                         child: SingleChildScrollView(
                           padding: const EdgeInsets.fromLTRB(8, 8, 24, 24),
-                          child: toolbar,
+                          child: Column(children: [?guide, toolbar]),
                         ),
                       ),
                     ),
@@ -508,6 +608,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
               return Column(
                 children: [
                   Expanded(child: Padding(padding: EdgeInsets.fromLTRB(side, 4, side, 8), child: canvas)),
+                  if (guide != null) Padding(padding: EdgeInsets.symmetric(horizontal: wide ? side - 16 : 0), child: guide),
                   Padding(padding: EdgeInsets.symmetric(horizontal: wide ? side - 16 : 0), child: toolbar),
                 ],
               );
@@ -653,6 +754,7 @@ class _Toolbar extends StatelessWidget {
     required this.onSymmetry,
     required this.onPaper,
     required this.onReplay,
+    required this.onAi,
   });
 
   final CanvasController controller;
@@ -665,6 +767,7 @@ class _Toolbar extends StatelessWidget {
   final VoidCallback onSymmetry;
   final VoidCallback onPaper;
   final VoidCallback onReplay;
+  final VoidCallback onAi;
 
   @override
   Widget build(BuildContext context) {
@@ -679,33 +782,51 @@ class _Toolbar extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Secondary actions
+              // Secondary actions. FittedBox scales the row down slightly on
+              // narrow screens or wide fonts so it never overflows.
               LayoutBuilder(
                 builder: (context, constraints) {
-                  final compact = constraints.maxWidth < 420;
-                  return Row(
-                    children: [
-                      _ChipButton(
-                        icon: Icons.layers_outlined,
-                        label: compact ? '${controller.layers.length}' : 'Layers · ${controller.layers.length}',
-                        onPressed: onLayers,
+                  final width = constraints.maxWidth;
+                  final compact = width < 520;
+                  final tight = width < 400;
+                  return Align(
+                    alignment: Alignment.centerLeft,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _ChipButton(
+                            icon: Icons.layers_outlined,
+                            label: compact ? '${controller.layers.length}' : 'Layers · ${controller.layers.length}',
+                            onPressed: onLayers,
+                          ),
+                          const SizedBox(width: 6),
+                          _ChipButton(
+                            icon: Icons.flip,
+                            label: compact ? null : 'Mirror',
+                            active: controller.symmetry != SymmetryMode.none,
+                            onPressed: onSymmetry,
+                          ),
+                          const SizedBox(width: 6),
+                          _ChipButton(icon: Icons.palette_outlined, label: compact ? null : 'Paper', onPressed: onPaper),
+                          const SizedBox(width: 18),
+                          _ChipButton(
+                            icon: Icons.auto_awesome_rounded,
+                            label: tight ? null : (compact ? 'AI' : 'Sketch AI'),
+                            active: true,
+                            onPressed: onAi,
+                          ),
+                          const SizedBox(width: 6),
+                          _ChipButton(
+                            icon: Icons.play_arrow_rounded,
+                            label: compact ? null : 'Replay',
+                            onPressed: controller.isEmpty ? null : onReplay,
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      _ChipButton(
-                        icon: Icons.flip,
-                        label: compact ? null : 'Mirror',
-                        active: controller.symmetry != SymmetryMode.none,
-                        onPressed: onSymmetry,
-                      ),
-                      const SizedBox(width: 8),
-                      _ChipButton(icon: Icons.palette_outlined, label: compact ? null : 'Paper', onPressed: onPaper),
-                      const Spacer(),
-                      _ChipButton(
-                        icon: Icons.play_arrow_rounded,
-                        label: compact ? null : 'Replay',
-                        onPressed: controller.isEmpty ? null : onReplay,
-                      ),
-                    ],
+                    ),
                   );
                 },
               ),

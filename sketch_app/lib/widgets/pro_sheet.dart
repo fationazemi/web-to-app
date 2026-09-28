@@ -31,6 +31,7 @@ class _ProSheetState extends State<_ProSheet> {
     (Icons.all_inclusive, 'Unlimited drawings', 'Free accounts keep up to ${AppSettings.freeDrawingLimit} sketches.'),
     (Icons.layers_outlined, 'Up to ${AppSettings.proLayerLimit} layers', 'Free accounts get ${AppSettings.freeLayerLimit} layers per sketch.'),
     (Icons.palette_outlined, 'Custom colors', 'Pick any color with the HSV picker.'),
+    (Icons.auto_awesome_outlined, 'Unlimited Sketch AI', 'Free accounts get ${AppSettings.freeAiRequestsPerDay} AI requests per day.'),
     (Icons.movie_creation_outlined, 'Time-lapse export', 'Share an animated GIF of your process.'),
     (Icons.hd_outlined, 'High-resolution export', 'Share crisp 4x PNGs.'),
   ];

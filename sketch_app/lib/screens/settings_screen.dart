@@ -75,6 +75,36 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: settings.setStylusOnly,
               ),
               const SizedBox(height: 20),
+              const _Header('Sketch AI'),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.key_outlined),
+                title: const Text('Claude API key'),
+                subtitle: Text(settings.aiApiKey.isEmpty ? 'Not set' : '••••${settings.aiApiKey.substring(settings.aiApiKey.length - 4)}'),
+                onTap: () async {
+                  final value = await showNameDialog(context, title: 'Claude API key', initial: settings.aiApiKey);
+                  if (value != null) settings.setAiApiKey(value);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.dns_outlined),
+                title: const Text('Proxy endpoint (optional)'),
+                subtitle: Text(settings.aiEndpoint.isEmpty ? 'Direct to api.anthropic.com' : settings.aiEndpoint),
+                onTap: () async {
+                  final value = await showNameDialog(context, title: 'Proxy endpoint', initial: settings.aiEndpoint);
+                  if (value != null) settings.setAiEndpoint(value);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.auto_awesome_outlined),
+                title: const Text('Usage today'),
+                subtitle: Text(settings.isPro
+                    ? 'Unlimited with Pro'
+                    : '${settings.aiRequestsToday} of ${AppSettings.freeAiRequestsPerDay} free requests used'),
+              ),
+              const SizedBox(height: 20),
               const _Header('Backup'),
               ListTile(
                 contentPadding: EdgeInsets.zero,

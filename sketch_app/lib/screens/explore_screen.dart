@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/stroke.dart';
 import '../theme/app_theme.dart';
 import '../theme/layout.dart';
+import 'ai_screen.dart';
 import 'canvas_screen.dart';
 
 const _prompts = <String>[
@@ -55,6 +56,8 @@ class ExploreScreen extends StatelessWidget {
       body: ListView(
         padding: Layout.pagePadding(context).copyWith(top: 4, bottom: 24 + MediaQuery.paddingOf(context).bottom + 70),
         children: [
+          _AiCard(onTap: () => Navigator.of(context).push(AiScreen.route())),
+          const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -130,6 +133,53 @@ class ExploreScreen extends StatelessWidget {
               subtitle: Text(body),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _AiCard extends StatelessWidget {
+  const _AiCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.primary,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(color: scheme.onPrimary.withValues(alpha: 0.12), shape: BoxShape.circle),
+                child: Icon(Icons.auto_awesome_rounded, color: scheme.onPrimary),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Sketch AI', style: TextStyle(color: scheme.onPrimary, fontWeight: FontWeight.w800, fontSize: 17)),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Not sure what to draw? Tell me your mood and time, and I will suggest ideas with steps.',
+                      style: TextStyle(color: scheme.onPrimary.withValues(alpha: 0.8), fontSize: 12.5, height: 1.3),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: scheme.onPrimary),
+            ],
+          ),
+        ),
       ),
     );
   }

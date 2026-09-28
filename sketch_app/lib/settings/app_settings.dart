@@ -14,6 +14,9 @@ class AppSettings extends ChangeNotifier {
   static const int freeLayerLimit = 2;
   static const int proLayerLimit = 10;
 
+  /// AI requests a free account may make per day.
+  static const int freeAiRequestsPerDay = 5;
+
   ThemeMode _themeMode = ThemeMode.system;
   double _defaultStrokeWidth = 12;
   bool _showTips = true;
@@ -21,6 +24,10 @@ class AppSettings extends ChangeNotifier {
   bool _samplesSeeded = false;
   bool _stylusOnly = false;
   bool _pressureSensitivity = true;
+  String _aiEndpoint = '';
+  String _aiApiKey = '';
+  String _aiUsageDay = '';
+  int _aiUsageCount = 0;
   File? _file;
 
   ThemeMode get themeMode => _themeMode;
@@ -34,6 +41,20 @@ class AppSettings extends ChangeNotifier {
 
   /// Whether stylus pressure changes the stroke width.
   bool get pressureSensitivity => _pressureSensitivity;
+
+  /// Custom endpoint for the AI assistant (empty = api.anthropic.com).
+  String get aiEndpoint => _aiEndpoint;
+
+  /// API key for direct calls. Kept in the app's private documents folder;
+  /// for a store release use a proxy endpoint instead (see README).
+  String get aiApiKey => _aiApiKey;
+
+  /// AI requests made today (free quota bookkeeping).
+  int get aiRequestsToday => _aiUsageDay == _today ? _aiUsageCount : 0;
+
+  bool get canUseAi => _isPro || aiRequestsToday < freeAiRequestsPerDay;
+
+  static String get _today => DateTime.now().toIso8601String().substring(0, 10);
 
   Future<void> load() async {
     try {
@@ -51,6 +72,10 @@ class AppSettings extends ChangeNotifier {
         _samplesSeeded = json['samplesSeeded'] as bool? ?? false;
         _stylusOnly = json['stylusOnly'] as bool? ?? false;
         _pressureSensitivity = json['pressureSensitivity'] as bool? ?? true;
+        _aiEndpoint = json['aiEndpoint'] as String? ?? '';
+        _aiApiKey = json['aiApiKey'] as String? ?? '';
+        _aiUsageDay = json['aiUsageDay'] as String? ?? '';
+        _aiUsageCount = (json['aiUsageCount'] as num?)?.toInt() ?? 0;
       }
     } catch (_) {
       // Missing or corrupt settings fall back to defaults.
@@ -70,6 +95,10 @@ class AppSettings extends ChangeNotifier {
         'samplesSeeded': _samplesSeeded,
         'stylusOnly': _stylusOnly,
         'pressureSensitivity': _pressureSensitivity,
+        'aiEndpoint': _aiEndpoint,
+        'aiApiKey': _aiApiKey,
+        'aiUsageDay': _aiUsageDay,
+        'aiUsageCount': _aiUsageCount,
       }));
     } catch (_) {
       // Failing to persist preferences is not fatal.
@@ -105,6 +134,29 @@ class AppSettings extends ChangeNotifier {
 
   void setPressureSensitivity(bool value) {
     _pressureSensitivity = value;
+    notifyListeners();
+    _persist();
+  }
+
+  void setAiEndpoint(String value) {
+    _aiEndpoint = value.trim();
+    notifyListeners();
+    _persist();
+  }
+
+  void setAiApiKey(String value) {
+    _aiApiKey = value.trim();
+    notifyListeners();
+    _persist();
+  }
+
+  /// Records one AI request against today's free quota.
+  void countAiRequest() {
+    if (_aiUsageDay != _today) {
+      _aiUsageDay = _today;
+      _aiUsageCount = 0;
+    }
+    _aiUsageCount++;
     notifyListeners();
     _persist();
   }
