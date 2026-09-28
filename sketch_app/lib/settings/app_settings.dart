@@ -14,12 +14,14 @@ class AppSettings extends ChangeNotifier {
   double _defaultStrokeWidth = 12;
   bool _showTips = true;
   bool _isPro = false;
+  bool _samplesSeeded = false;
   File? _file;
 
   ThemeMode get themeMode => _themeMode;
   double get defaultStrokeWidth => _defaultStrokeWidth;
   bool get showTips => _showTips;
   bool get isPro => _isPro;
+  bool get samplesSeeded => _samplesSeeded;
 
   Future<void> load() async {
     try {
@@ -34,6 +36,7 @@ class AppSettings extends ChangeNotifier {
         _defaultStrokeWidth = (json['defaultStrokeWidth'] as num?)?.toDouble() ?? 12;
         _showTips = json['showTips'] as bool? ?? true;
         _isPro = json['isPro'] as bool? ?? false;
+        _samplesSeeded = json['samplesSeeded'] as bool? ?? false;
       }
     } catch (_) {
       // Missing or corrupt settings fall back to defaults.
@@ -50,6 +53,7 @@ class AppSettings extends ChangeNotifier {
         'defaultStrokeWidth': _defaultStrokeWidth,
         'showTips': _showTips,
         'isPro': _isPro,
+        'samplesSeeded': _samplesSeeded,
       }));
     } catch (_) {
       // Failing to persist preferences is not fatal.
@@ -77,6 +81,11 @@ class AppSettings extends ChangeNotifier {
   /// Marks the account as Pro. Billing is intentionally not wired up yet:
   /// hook `in_app_purchase` (or RevenueCat) here and call this on a
   /// verified purchase.
+  void setSamplesSeeded(bool value) {
+    _samplesSeeded = value;
+    _persist();
+  }
+
   void setPro(bool value) {
     _isPro = value;
     notifyListeners();

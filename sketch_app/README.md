@@ -19,6 +19,19 @@ UI, a fast canvas, and a freemium model.
 - **Settings**: light/dark/system theme, default brush size, tips toggle
 - **Freemium**: free plan keeps up to 10 sketches; Pro unlocks unlimited
   sketches, custom colors and HD export
+- Four starter sketches (Landscape, Flower, Abstract, Portrait) are generated
+  on first launch so the library never opens empty
+
+## Design
+
+- Typography: **Inter** for UI, **Caveat** for handwritten accents (canvas
+  title, hints, notes). Both are bundled under `assets/fonts/` with their
+  licenses.
+- Warm paper background, white cards with soft shadows, near-black ink and a
+  dusty blue accent.
+- Home hero card with a painterly brush stroke drawn procedurally
+  (`lib/widgets/brush_stroke.dart`), docked "+" button with a notched bottom
+  bar, and light/dark themes.
 
 ## Project layout
 
@@ -32,6 +45,7 @@ lib/
     flood_fill.dart         scanline flood fill on raw RGBA
     template_painter.dart   grid / ruled / dots paper
   data/drawing_repository.dart  on-disk storage (JSON + PNG per drawing)
+  data/sample_sketches.dart     procedurally generated starter sketches
   models/                   Stroke, ToolType, CanvasTemplate, DrawingMeta
   screens/                  home shell, home, canvas, drawings, explore, settings
   settings/app_settings.dart    persisted user preferences

@@ -4,6 +4,7 @@ import '../app.dart';
 import '../models/drawing.dart';
 import '../models/stroke.dart';
 import '../theme/app_theme.dart';
+import '../widgets/brush_stroke.dart';
 import '../widgets/dialogs.dart';
 import '../widgets/drawing_thumbnail.dart';
 import 'canvas_screen.dart';
@@ -21,26 +22,19 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 20,
+        toolbarHeight: 76,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Sketch', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 26)),
+            const Text('Sketch'),
             Text(
               'Draw. Create. Share.',
-              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+              style: handStyle(size: 17, bold: false, color: theme.colorScheme.onSurface.withValues(alpha: 0.55)),
             ),
           ],
         ),
-        toolbarHeight: 72,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 20),
-            child: CircleAvatar(
-              backgroundColor: theme.cardColor,
-              foregroundColor: theme.colorScheme.onSurface,
-              child: const Text('JJ', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-            ),
-          ),
+        actions: const [
+          Padding(padding: EdgeInsets.only(right: 20), child: _Avatar()),
         ],
       ),
       body: ListenableBuilder(
@@ -48,25 +42,26 @@ class HomeScreen extends StatelessWidget {
         builder: (context, _) {
           final recent = scope.repository.drawings.take(8).toList();
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+            padding: EdgeInsets.fromLTRB(20, 4, 20, 24 + MediaQuery.paddingOf(context).bottom + 70),
             children: [
               const _HeroCard(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
               _SectionHeader(title: 'Recent', onSeeAll: () => onNavigate(1)),
               const SizedBox(height: 12),
               if (recent.isEmpty)
                 const _EmptyRecent()
               else
                 SizedBox(
-                  height: 150,
+                  height: 156,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
+                    clipBehavior: Clip.none,
                     itemCount: recent.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 12),
+                    separatorBuilder: (_, _) => const SizedBox(width: 14),
                     itemBuilder: (context, i) => _RecentCard(meta: recent[i]),
                   ),
                 ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 28),
               _SectionHeader(title: 'Templates', onSeeAll: () => onNavigate(2)),
               const SizedBox(height: 12),
               Row(
@@ -78,12 +73,39 @@ class HomeScreen extends StatelessWidget {
                 ],
               ),
               if (scope.settings.showTips) ...[
-                const SizedBox(height: 20),
+                const SizedBox(height: 22),
                 _TipBanner(onDismiss: () => scope.settings.setShowTips(false)),
               ],
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _Avatar extends StatelessWidget {
+  const _Avatar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFFFFF), Color(0xFFE9E6DE)],
+        ),
+        border: Border.all(color: Theme.of(context).dividerColor),
+        boxShadow: softShadow(context, blur: 8, y: 2),
+      ),
+      alignment: Alignment.center,
+      child: const Text(
+        'JJ',
+        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.ink, letterSpacing: 0.2),
       ),
     );
   }
@@ -95,69 +117,67 @@ class _HeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurface.withValues(alpha: 0.5);
     return Container(
-      height: 180,
+      height: 196,
       decoration: BoxDecoration(
         color: theme.cardColor,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(color: theme.dividerColor),
+        boxShadow: softShadow(context),
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
         children: [
-          Positioned(
-            right: -10,
-            top: 10,
-            bottom: 10,
-            width: 170,
-            child: CustomPaint(painter: _BrushStrokePainter()),
+          const Positioned(
+            right: -6,
+            top: 14,
+            bottom: 14,
+            width: 180,
+            child: CustomPaint(painter: BrushStrokePainter()),
           ),
           Positioned(
-            right: 22,
-            bottom: 26,
+            right: 26,
+            bottom: 22,
             child: Transform.rotate(
-              angle: -0.15,
+              angle: -0.18,
               child: Text(
                 'Create\nsomething\ntoday.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontStyle: FontStyle.italic,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
+                style: handStyle(size: 15, bold: false, color: theme.colorScheme.onSurface.withValues(alpha: 0.7), height: 1.05),
               ),
             ),
           ),
+          Positioned(
+            right: 92,
+            bottom: 24,
+            child: Text('S', style: handStyle(size: 26, bold: false, color: theme.colorScheme.onSurface.withValues(alpha: 0.6))),
+          ),
           Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'A BLANK CANVAS',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    letterSpacing: 1.4,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ),
+                Text('A BLANK CANVAS', style: theme.textTheme.labelSmall?.copyWith(color: muted)),
                 const SizedBox(height: 8),
                 const Text(
                   'Good ideas\nstart here.',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, height: 1.15),
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, height: 1.12, letterSpacing: -0.6),
                 ),
                 const Spacer(),
                 FilledButton(
                   onPressed: () => Navigator.of(context).push(CanvasScreen.route()),
                   style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    textStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600, fontSize: 14),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text('Start Drawing'),
-                      SizedBox(width: 8),
-                      Icon(Icons.arrow_forward, size: 16),
+                      SizedBox(width: 10),
+                      Icon(Icons.arrow_forward_rounded, size: 16),
                     ],
                   ),
                 ),
@@ -170,38 +190,6 @@ class _HeroCard extends StatelessWidget {
   }
 }
 
-/// The decorative blue brush stroke on the hero card.
-class _BrushStrokePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.accent.withValues(alpha: 0.85)
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = size.height * 0.22
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
-    final path = Path()
-      ..moveTo(size.width * 0.15, size.height * 0.62)
-      ..cubicTo(size.width * 0.35, size.height * 0.05, size.width * 0.55, size.height * 0.95,
-          size.width * 0.9, size.height * 0.35);
-    canvas.drawPath(path, paint);
-
-    final thin = Paint()
-      ..color = AppColors.ink.withValues(alpha: 0.7)
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 1.5;
-    final squiggle = Path()
-      ..moveTo(size.width * 0.62, size.height * 0.72)
-      ..cubicTo(size.width * 0.70, size.height * 0.60, size.width * 0.58, size.height * 0.85,
-          size.width * 0.72, size.height * 0.88);
-    canvas.drawPath(squiggle, thin);
-  }
-
-  @override
-  bool shouldRepaint(_BrushStrokePainter oldDelegate) => false;
-}
-
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.title, required this.onSeeAll});
 
@@ -210,9 +198,10 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6);
     return Row(
       children: [
-        Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
         const Spacer(),
         InkWell(
           onTap: onSeeAll,
@@ -221,8 +210,8 @@ class _SectionHeader extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
             child: Row(
               children: [
-                Text('See All', style: Theme.of(context).textTheme.labelMedium),
-                const Icon(Icons.chevron_right, size: 18),
+                Text('See All', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: muted)),
+                Icon(Icons.chevron_right_rounded, size: 18, color: muted),
               ],
             ),
           ),
@@ -241,15 +230,23 @@ class _RecentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SizedBox(
-      width: 104,
+      width: 108,
       child: InkWell(
         onTap: () => Navigator.of(context).push(CanvasScreen.route(existing: meta)),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(width: 104, height: 104, child: DrawingThumbnail(meta: meta)),
-            const SizedBox(height: 6),
+            Container(
+              width: 108,
+              height: 108,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: softShadow(context, blur: 12, y: 4),
+              ),
+              child: DrawingThumbnail(meta: meta, borderRadius: 14),
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -257,7 +254,7 @@ class _RecentCard extends StatelessWidget {
                     meta.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
                   ),
                 ),
                 DrawingMenu(meta: meta, iconSize: 16),
@@ -265,7 +262,7 @@ class _RecentCard extends StatelessWidget {
             ),
             Text(
               formatDate(meta.updatedAt),
-              style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+              style: TextStyle(fontSize: 10.5, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
             ),
           ],
         ),
@@ -290,7 +287,7 @@ class DrawingMenu extends StatelessWidget {
       child: PopupMenuButton<String>(
         padding: EdgeInsets.zero,
         iconSize: iconSize,
-        icon: const Icon(Icons.more_horiz),
+        icon: Icon(Icons.more_horiz, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6)),
         onSelected: (value) async {
           switch (value) {
             case 'open':
@@ -326,7 +323,8 @@ class _EmptyRecent extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: theme.dividerColor),
       ),
       child: Row(
@@ -355,25 +353,89 @@ class _TemplateCard extends StatelessWidget {
     final theme = Theme.of(context);
     return InkWell(
       onTap: () => Navigator.of(context).push(CanvasScreen.route(template: template)),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        height: 92,
+        height: 96,
         decoration: BoxDecoration(
           color: theme.cardColor,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(color: theme.dividerColor),
+          boxShadow: softShadow(context, blur: 10, y: 3, alpha: 0.04),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(template.icon, color: theme.colorScheme.onSurface.withValues(alpha: 0.6)),
-            const SizedBox(height: 8),
-            Text(template.label, style: const TextStyle(fontSize: 10), textAlign: TextAlign.center),
+            SizedBox(
+              width: 34,
+              height: 34,
+              child: CustomPaint(
+                painter: _TemplatePreviewPainter(template, theme.colorScheme.onSurface.withValues(alpha: 0.55)),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              template.label,
+              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w500),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),
     );
   }
+}
+
+/// A miniature of each paper pattern for the template cards.
+class _TemplatePreviewPainter extends CustomPainter {
+  const _TemplatePreviewPainter(this.template, this.color);
+
+  final CanvasTemplate template;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round;
+    switch (template) {
+      case CanvasTemplate.blank:
+        final frame = RRect.fromRectAndRadius(Rect.fromLTWH(1, 3, w - 2, h - 6), const Radius.circular(3));
+        canvas.drawRRect(frame, paint);
+        final mountains = Path()
+          ..moveTo(4, h - 8)
+          ..lineTo(w * 0.35, h * 0.42)
+          ..lineTo(w * 0.52, h * 0.62)
+          ..lineTo(w * 0.66, h * 0.5)
+          ..lineTo(w - 4, h - 8);
+        canvas.drawPath(mountains, paint);
+        canvas.drawCircle(Offset(w * 0.72, h * 0.3), 2.2, paint);
+      case CanvasTemplate.grid:
+        for (var i = 0; i <= 3; i++) {
+          final x = w * i / 3, y = h * i / 3;
+          canvas.drawLine(Offset(x, 0), Offset(x, h), paint);
+          canvas.drawLine(Offset(0, y), Offset(w, y), paint);
+        }
+      case CanvasTemplate.ruled:
+        for (var i = 0; i < 4; i++) {
+          final y = h * (0.2 + i * 0.2);
+          canvas.drawLine(Offset(2, y), Offset(w - 2, y), paint);
+        }
+      case CanvasTemplate.dots:
+        final dot = Paint()..color = color;
+        for (var i = 0; i < 3; i++) {
+          for (var j = 0; j < 3; j++) {
+            canvas.drawCircle(Offset(w * (0.2 + i * 0.3), h * (0.2 + j * 0.3)), 1.9, dot);
+          }
+        }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TemplatePreviewPainter oldDelegate) =>
+      oldDelegate.template != template || oldDelegate.color != color;
 }
 
 class _TipBanner extends StatelessWidget {
@@ -385,23 +447,23 @@ class _TipBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
       decoration: BoxDecoration(
         color: dark ? AppColors.accent.withValues(alpha: 0.2) : AppColors.accentSoft,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         children: [
-          const Icon(Icons.auto_awesome, size: 18, color: AppColors.accent),
+          const Icon(Icons.auto_awesome_rounded, size: 18, color: AppColors.accentDeep),
           const SizedBox(width: 12),
           const Expanded(
             child: Text(
               'Small sketches today,\nbig progress tomorrow.',
-              style: TextStyle(fontSize: 12, height: 1.3),
+              style: TextStyle(fontSize: 12.5, height: 1.35, fontWeight: FontWeight.w500),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close, size: 18),
+            icon: const Icon(Icons.close_rounded, size: 18),
             onPressed: onDismiss,
             visualDensity: VisualDensity.compact,
           ),

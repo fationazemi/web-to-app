@@ -98,11 +98,12 @@ class DrawingRepository extends ChangeNotifier {
     required List<Stroke> strokes,
     ui.Image? background,
     required Uint8List thumbnailPng,
+    DateTime? timestamp,
   }) async {
     final root = _root;
     if (root == null) throw StateError('Storage is not available');
 
-    final now = DateTime.now();
+    final now = timestamp ?? DateTime.now();
     final existing = id == null ? null : _items[id];
     final meta = DrawingMeta(
       id: existing?.id ?? now.microsecondsSinceEpoch.toRadixString(36),

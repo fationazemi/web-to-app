@@ -287,18 +287,20 @@ class _CanvasScreenState extends State<CanvasScreen> {
           titleSpacing: 0,
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 _name ?? 'Sketch',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 20),
+                style: handStyle(size: 26, color: Theme.of(context).colorScheme.onSurface),
               ),
               Text(
                 'Draw. Create. Share.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5),
+                style: handStyle(
+                  size: 14,
+                  bold: false,
+                  color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.55),
                 ),
               ),
             ],
@@ -365,13 +367,7 @@ class _CanvasScreenState extends State<CanvasScreen> {
                               child: DecoratedBox(
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(14),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.06),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
+                                  boxShadow: softShadow(context, blur: 20, y: 8, alpha: 0.08),
                                 ),
                                 child: SketchCanvas(controller: controller),
                               ),

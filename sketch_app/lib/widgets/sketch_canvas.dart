@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../canvas/canvas_controller.dart';
 import '../canvas/sketch_painter.dart';
 import '../models/stroke.dart';
+import '../theme/app_theme.dart';
+import 'brush_stroke.dart';
 
 /// The interactive drawing surface. Keeps a 3:4 aspect ratio and forwards
 /// pointer events to the [CanvasController] in normalized coordinates.
@@ -150,24 +152,21 @@ class _StartDrawingHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.45);
+    final color = Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Transform.rotate(
-            angle: -0.08,
-            child: Text(
-              'Start drawing',
-              style: TextStyle(
-                fontSize: 18,
-                fontStyle: FontStyle.italic,
-                color: color,
-              ),
-            ),
+            angle: -0.12,
+            child: Text('Start drawing', style: handStyle(size: 24, bold: false, color: color)),
           ),
-          const SizedBox(height: 4),
-          Icon(Icons.subdirectory_arrow_left_rounded, color: color),
+          const SizedBox(height: 2),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: SizedBox(width: 34, height: 36, child: CustomPaint(painter: CurlyArrowPainter(color: color))),
+          ),
         ],
       ),
     );
