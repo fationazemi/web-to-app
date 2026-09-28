@@ -18,13 +18,33 @@ class AiException implements Exception {
   String toString() => message;
 }
 
+/// Values baked in at build time for store releases:
+///
+/// ```
+/// flutter build apk --dart-define=SKETCH_AI_PROXY_URL=https://... \
+///                   --dart-define=SKETCH_AI_APP_TOKEN=...
+/// ```
+///
+/// With these set, the app talks to the proxy (see `proxy/`) and never
+/// carries a Claude API key.
+class AiDefaults {
+  AiDefaults._();
+
+  static const String proxyUrl = String.fromEnvironment('SKETCH_AI_PROXY_URL');
+  static const String appToken = String.fromEnvironment('SKETCH_AI_APP_TOKEN');
+
+  static bool get hasProxy => proxyUrl.isNotEmpty;
+}
+
 /// How to reach the Claude API. In development the key lives on the device;
-/// for a store release point [endpoint] at a small proxy that holds the key
-/// (see README) and leave [apiKey] empty.
+/// for a store release point [endpoint] at the proxy that holds the key and
+/// leave [apiKey] empty.
 class AiConfig {
   const AiConfig({
     this.endpoint = defaultEndpoint,
     this.apiKey = '',
+    this.appToken = '',
+    this.deviceId = '',
     this.model = defaultModel,
   });
 
@@ -33,6 +53,13 @@ class AiConfig {
 
   final String endpoint;
   final String apiKey;
+
+  /// Shared token the proxy expects in `x-sketch-token`.
+  final String appToken;
+
+  /// Random per-install id the proxy uses for quotas (`x-sketch-device`).
+  final String deviceId;
+
   final String model;
 
   bool get isConfigured => apiKey.isNotEmpty || endpoint != defaultEndpoint;
@@ -59,6 +86,8 @@ class AiService {
         'anthropic-version': apiVersion,
         'anthropic-beta': fallbackBeta,
         if (config.apiKey.isNotEmpty) 'x-api-key': config.apiKey,
+        if (config.appToken.isNotEmpty) 'x-sketch-token': config.appToken,
+        if (config.deviceId.isNotEmpty) 'x-sketch-device': config.deviceId,
       };
 
   Map<String, dynamic> _body({

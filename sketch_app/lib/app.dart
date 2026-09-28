@@ -29,17 +29,25 @@ class AppScope extends InheritedWidget {
   /// HTTP client for the assistant; tests inject a mock here.
   final http.Client? aiClient;
 
-  /// Builds an assistant client from the current settings.
-  AiService buildAi() => AiService(
-        config: AiConfig(
-          endpoint: settings.aiEndpoint.isEmpty ? AiConfig.defaultEndpoint : settings.aiEndpoint,
-          apiKey: settings.aiApiKey,
-        ),
-        client: aiClient,
-      );
+  /// Builds an assistant client from the current settings. A user-entered
+  /// endpoint or key wins over the values baked in at build time.
+  AiService buildAi() {
+    final endpoint = settings.aiEndpoint.isNotEmpty
+        ? settings.aiEndpoint
+        : (AiDefaults.hasProxy ? AiDefaults.proxyUrl : AiConfig.defaultEndpoint);
+    return AiService(
+      config: AiConfig(
+        endpoint: endpoint,
+        apiKey: settings.aiApiKey,
+        appToken: AiDefaults.appToken,
+        deviceId: settings.deviceId.isEmpty ? 'unknown-device' : settings.deviceId,
+      ),
+      client: aiClient,
+    );
+  }
 
-  /// Whether the assistant is reachable (key or proxy configured).
-  bool get aiConfigured => settings.aiApiKey.isNotEmpty || settings.aiEndpoint.isNotEmpty;
+  /// Whether the assistant is reachable (key, proxy, or build-time proxy).
+  bool get aiConfigured => settings.aiApiKey.isNotEmpty || settings.aiEndpoint.isNotEmpty || AiDefaults.hasProxy;
 
   static AppScope of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<AppScope>();

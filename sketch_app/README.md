@@ -54,14 +54,30 @@ default), `output_config.effort` (`medium` for ideas/feedback/tutorials,
 (`fallbacks: "default"` with the `server-side-fallback-2026-07-01` beta), so a
 declined request is retried on a fallback model instead of failing.
 
-**Configuration** (Settings › Sketch AI):
+**Configuration**:
 
-- *Development*: paste a Claude API key. It is stored in the app's private
-  documents folder, never shared, and only sent to the endpoint below.
-- *Production*: do **not** ship a key in the app. Deploy a small proxy that
-  holds the key and forwards `POST /v1/messages` unchanged (add rate limiting
-  and your own auth), then set its URL as the endpoint and leave the key
-  empty. The app sends exactly the same request body to the proxy.
+- *Development*: paste a Claude API key under Settings › Sketch AI. It is
+  stored in the app's private documents folder, never shared, and only sent
+  to the endpoint in use.
+- *Production*: do **not** ship a key in the app. Deploy the Cloudflare
+  Worker in [`proxy/`](proxy/README.md) (holds the key, checks an app token,
+  enforces per-device rate limits and the free daily quota) and bake its URL
+  and token into the build:
+
+  ```bash
+  flutter build apk --release \
+    --dart-define=SKETCH_AI_PROXY_URL=https://sketch-ai-proxy.<you>.workers.dev \
+    --dart-define=SKETCH_AI_APP_TOKEN=<APP_TOKEN>
+  ```
+
+  The app then sends `x-sketch-token` and a random per-install
+  `x-sketch-device` id instead of an API key. A user-entered endpoint or key
+  in Settings still overrides the build-time values (handy for testing).
+
+**CI**: `.github/workflows/sketch_app.yml` runs `flutter analyze`, the tests,
+an unsigned release APK build (uploaded as an artifact), an iOS build without
+code signing, and the proxy's typecheck and tests on every push that touches
+`sketch_app/`.
 
 Prompts are in `lib/ai/prompts.dart`; keep them stable because the system
 prompt is a cache prefix on the API side.

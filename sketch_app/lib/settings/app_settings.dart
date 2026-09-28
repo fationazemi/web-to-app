@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -28,6 +29,7 @@ class AppSettings extends ChangeNotifier {
   String _aiApiKey = '';
   String _aiUsageDay = '';
   int _aiUsageCount = 0;
+  String _deviceId = '';
   File? _file;
 
   ThemeMode get themeMode => _themeMode;
@@ -48,6 +50,10 @@ class AppSettings extends ChangeNotifier {
   /// API key for direct calls. Kept in the app's private documents folder;
   /// for a store release use a proxy endpoint instead (see README).
   String get aiApiKey => _aiApiKey;
+
+  /// Random per-install id, created on first launch. Sent to the AI proxy
+  /// for quotas; it identifies the install, not the person.
+  String get deviceId => _deviceId;
 
   /// AI requests made today (free quota bookkeeping).
   int get aiRequestsToday => _aiUsageDay == _today ? _aiUsageCount : 0;
@@ -76,11 +82,22 @@ class AppSettings extends ChangeNotifier {
         _aiApiKey = json['aiApiKey'] as String? ?? '';
         _aiUsageDay = json['aiUsageDay'] as String? ?? '';
         _aiUsageCount = (json['aiUsageCount'] as num?)?.toInt() ?? 0;
+        _deviceId = json['deviceId'] as String? ?? '';
       }
     } catch (_) {
       // Missing or corrupt settings fall back to defaults.
     }
+    if (_deviceId.isEmpty) {
+      _deviceId = newDeviceId();
+      await _persist();
+    }
     notifyListeners();
+  }
+
+  static String newDeviceId() {
+    final random = Random.secure();
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    return List.generate(24, (_) => alphabet[random.nextInt(alphabet.length)]).join();
   }
 
   Future<void> _persist() async {
@@ -99,6 +116,7 @@ class AppSettings extends ChangeNotifier {
         'aiApiKey': _aiApiKey,
         'aiUsageDay': _aiUsageDay,
         'aiUsageCount': _aiUsageCount,
+        'deviceId': _deviceId,
       }));
     } catch (_) {
       // Failing to persist preferences is not fatal.

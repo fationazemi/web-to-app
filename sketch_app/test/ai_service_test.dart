@@ -149,6 +149,20 @@ void main() {
     );
   });
 
+  test('proxy mode sends the app token and device id instead of a key', () async {
+    http.Request? captured;
+    final client = MockClient((request) async {
+      captured = request;
+      return ok({'title': 'x', 'steps': []});
+    });
+    const proxy = AiConfig(endpoint: 'https://sketch-proxy.example.com', appToken: 'app-token', deviceId: 'device-1234');
+    await AiService(config: proxy, client: client).tutorial('a cat');
+    expect(captured!.url.toString(), 'https://sketch-proxy.example.com/v1/messages');
+    expect(captured!.headers['x-sketch-token'], 'app-token');
+    expect(captured!.headers['x-sketch-device'], 'device-1234');
+    expect(captured!.headers.containsKey('x-api-key'), isFalse);
+  });
+
   test('a proxy endpoint needs no API key', () {
     const proxy = AiConfig(endpoint: 'https://sketch-proxy.example.com/');
     expect(proxy.isConfigured, isTrue);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../ai/ai_service.dart';
 import '../app.dart';
 import '../settings/app_settings.dart';
 import '../theme/app_theme.dart';
@@ -90,7 +91,9 @@ class SettingsScreen extends StatelessWidget {
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.dns_outlined),
                 title: const Text('Proxy endpoint (optional)'),
-                subtitle: Text(settings.aiEndpoint.isEmpty ? 'Direct to api.anthropic.com' : settings.aiEndpoint),
+                subtitle: Text(settings.aiEndpoint.isNotEmpty
+                    ? settings.aiEndpoint
+                    : (AiDefaults.hasProxy ? 'Configured for this build' : 'Direct to api.anthropic.com')),
                 onTap: () async {
                   final value = await showNameDialog(context, title: 'Proxy endpoint', initial: settings.aiEndpoint);
                   if (value != null) settings.setAiEndpoint(value);
